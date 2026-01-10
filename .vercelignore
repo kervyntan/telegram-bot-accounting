@@ -1,0 +1,11 @@
+.vercelignore
+*.pyc
+__pycache__/
+.env
+.venv/
+venv/
+*.pdf
+invoices/
+.git/
+.DS_Store
+.ruff_cache/
