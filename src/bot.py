@@ -67,30 +67,40 @@ Use /help to see the message format and examples."""
             # Parse message
             invoice_data = self.parser.parse_invoice_message(message_text)
 
-            # Generate PDF
-            pdf_path = self.generator.generate_pdf(invoice_data)
+            # Generate both PDFs (client and internal)
+            client_pdf_path, internal_pdf_path = self.generator.generate_pdf(invoice_data)
 
             # Prepare caption
             caption = self._format_invoice_caption(invoice_data)
 
-            # Send PDF
-            with open(pdf_path, "rb") as pdf_file:
+            # Send client PDF
+            with open(client_pdf_path, "rb") as pdf_file:
                 await update.message.reply_document(
                     document=pdf_file,
-                    filename=pdf_path.name,
-                    caption=caption,
+                    filename=f"invoice_{invoice_data.invoice_number}_client.pdf",
+                    caption=caption + "\n\n📄 Client Invoice (for customer)",
+                )
+
+            # Send internal PDF
+            with open(internal_pdf_path, "rb") as pdf_file:
+                await update.message.reply_document(
+                    document=pdf_file,
+                    filename=f"invoice_{invoice_data.invoice_number}_internal.pdf",
+                    caption="📊 Internal Invoice (with cost & profit details)",
                 )
 
             # Delete processing message
             await processing_msg.delete()
 
-            # Clean up PDF after sending
+            # Clean up PDFs after sending
             await asyncio.sleep(5)
-            if pdf_path.exists():
-                pdf_path.unlink()
+            if client_pdf_path.exists():
+                client_pdf_path.unlink()
+            if internal_pdf_path.exists():
+                internal_pdf_path.unlink()
 
             logger.info(
-                f"Invoice generated for chat {update.message.chat_id}: "
+                f"Invoices generated for chat {update.message.chat_id}: "
                 f"{invoice_data.invoice_number}"
             )
 

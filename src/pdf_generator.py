@@ -21,40 +21,56 @@ class InvoiceGenerator:
         """Initialize generator with settings."""
         self.settings = settings
 
-    def generate_pdf(self, invoice_data: InvoiceData) -> Path:
+    def generate_pdf(self, invoice_data: InvoiceData) -> tuple[Path, Path]:
         """
-        Generate PDF invoice.
+        Generate both client and internal PDF invoices.
 
         Args:
             invoice_data: Invoice data to generate PDF from
 
         Returns:
-            Path to generated PDF file
+            Tuple of (client_pdf_path, internal_pdf_path)
         """
-        # Create filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"invoice_{invoice_data.invoice_number}_{timestamp}.pdf"
-        filepath = self.settings.invoices_dir / filename
 
-        # Create PDF
+        # Generate client invoice (without cost price)
+        client_filename = f"invoice_{invoice_data.invoice_number}_{timestamp}_client.pdf"
+        client_filepath = self.settings.invoices_dir / client_filename
+        self._generate_single_pdf(client_filepath, invoice_data, is_client=True)
+
+        # Generate internal invoice (with cost price and profit)
+        internal_filename = f"invoice_{invoice_data.invoice_number}_{timestamp}_internal.pdf"
+        internal_filepath = self.settings.invoices_dir / internal_filename
+        self._generate_single_pdf(internal_filepath, invoice_data, is_client=False)
+
+        return client_filepath, internal_filepath
+
+    def _generate_single_pdf(
+        self, filepath: Path, invoice_data: InvoiceData, is_client: bool
+    ) -> None:
+        """Generate a single PDF invoice."""
         c = canvas.Canvas(str(filepath), pagesize=A4)
         width, height = A4
 
         # Draw invoice
-        self._draw_header(c, width, height)
+        self._draw_header(c, width, height, is_client)
         self._draw_invoice_details(c, invoice_data, height)
-        self._draw_items_table(c, invoice_data, height)
-        self._draw_totals(c, invoice_data, width, height)
+        if is_client:
+            self._draw_items_table_client(c, invoice_data, height)
+        else:
+            self._draw_items_table_internal(c, invoice_data, height)
+        self._draw_totals(c, invoice_data, width, height, is_client)
         self._draw_footer(c, width, height)
 
         c.save()
-        return filepath
 
-    def _draw_header(self, c: canvas.Canvas, width: float, height: float) -> None:
+    def _draw_header(
+        self, c: canvas.Canvas, width: float, height: float, is_client: bool = True
+    ) -> None:
         """Draw invoice header with business details."""
         # Try to draw logo instead of business name
         logo_path = Path(__file__).parent.parent / "assets" / "logo.jpg"
-        
+
         if logo_path.exists():
             # Draw logo with reasonable size (keeping aspect ratio)
             logo_height = 20 * mm
@@ -94,7 +110,8 @@ class InvoiceGenerator:
 
         # INVOICE title
         c.setFont("Helvetica-Bold", 24)
-        c.drawRightString(width - 30 * mm, height - 30 * mm, "INVOICE")
+        invoice_type = "INVOICE" if is_client else "INVOICE (INTERNAL)"
+        c.drawRightString(width - 30 * mm, height - 30 * mm, invoice_type)
 
     def _draw_invoice_details(
         self, c: canvas.Canvas, invoice_data: InvoiceData, height: float
@@ -120,11 +137,66 @@ class InvoiceGenerator:
             c.setFont("Helvetica", 10)
             c.drawString(60 * mm, y, invoice_data.customer_name)
 
-    def _draw_items_table(self, c: canvas.Canvas, invoice_data: InvoiceData, height: float) -> None:
-        """Draw items table."""
+    def _draw_items_table_client(
+        self, c: canvas.Canvas, invoice_data: InvoiceData, height: float
+    ) -> None:
+        """Draw items table for client (without cost price)."""
         y = height - 95 * mm
 
-        # Table headers
+        # Table headers (no cost price column)
+        headers = ["Item", "Unit Price", "Qty", "Amount"]
+        col_widths = [100 * mm, 30 * mm, 15 * mm, 25 * mm]
+
+        # Prepare data
+        data = [headers]
+        for item in invoice_data.items:
+            data.append(
+                [
+                    item.name,
+                    f"${item.sale_price:.2f}",
+                    str(item.quantity),
+                    f"${item.amount:.2f}",
+                ]
+            )
+
+        # Create table
+        table = Table(data, colWidths=col_widths)
+        table.setStyle(
+            TableStyle(
+                [
+                    # Header styling
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+                    ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, 0), 10),
+                    ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+                    # Body styling
+                    ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
+                    ("ALIGN", (0, 1), (0, -1), "LEFT"),
+                    ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 1), (-1, -1), 9),
+                    ("TOPPADDING", (0, 1), (-1, -1), 6),
+                    ("BOTTOMPADDING", (0, 1), (-1, -1), 6),
+                    # Grid
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                    # Alternating rows
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+                ]
+            )
+        )
+
+        # Draw table
+        table.wrapOn(c, 160 * mm, 200 * mm)
+        table.drawOn(c, 30 * mm, y - len(data) * 10 * mm)
+
+    def _draw_items_table_internal(
+        self, c: canvas.Canvas, invoice_data: InvoiceData, height: float
+    ) -> None:
+        """Draw items table for internal use (with cost price and profit)."""
+        y = height - 95 * mm
+
+        # Table headers (with cost price)
         headers = ["Item", "Cost Price", "Sale Price", "Qty", "Amount"]
         col_widths = [70 * mm, 25 * mm, 25 * mm, 15 * mm, 25 * mm]
 
@@ -173,7 +245,12 @@ class InvoiceGenerator:
         table.drawOn(c, 30 * mm, y - len(data) * 10 * mm)
 
     def _draw_totals(
-        self, c: canvas.Canvas, invoice_data: InvoiceData, width: float, height: float
+        self,
+        c: canvas.Canvas,
+        invoice_data: InvoiceData,
+        width: float,
+        height: float,
+        is_client: bool = True,
     ) -> None:
         """Draw totals section."""
         x = width - 80 * mm
@@ -203,11 +280,12 @@ class InvoiceGenerator:
         c.drawRightString(width - 30 * mm, y, f"${invoice_data.totals.grand_total:.2f}")
         y -= 10 * mm
 
-        # Profit information
-        c.setFont("Helvetica", 9)
-        c.drawString(x, y, f"Total Cost: ${invoice_data.totals.total_cost:.2f}")
-        y -= 4 * mm
-        c.drawString(x, y, f"Total Profit: ${invoice_data.totals.total_profit:.2f}")
+        # Profit information (only for internal invoice)
+        if not is_client:
+            c.setFont("Helvetica", 9)
+            c.drawString(x, y, f"Total Cost: ${invoice_data.totals.total_cost:.2f}")
+            y -= 4 * mm
+            c.drawString(x, y, f"Total Profit: ${invoice_data.totals.total_profit:.2f}")
 
     def _draw_footer(self, c: canvas.Canvas, width: float, height: float) -> None:
         """Draw footer."""
