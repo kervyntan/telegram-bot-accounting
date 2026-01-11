@@ -6,6 +6,7 @@ from pathlib import Path
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Table, TableStyle
 
@@ -51,9 +52,32 @@ class InvoiceGenerator:
 
     def _draw_header(self, c: canvas.Canvas, width: float, height: float) -> None:
         """Draw invoice header with business details."""
-        # Business name
-        c.setFont("Helvetica-Bold", 20)
-        c.drawString(30 * mm, height - 30 * mm, self.settings.business_name)
+        # Try to draw logo instead of business name
+        logo_path = Path(__file__).parent.parent / "assets" / "logo.jpg"
+        
+        if logo_path.exists():
+            # Draw logo with reasonable size (keeping aspect ratio)
+            logo_height = 20 * mm
+            logo_width = 40 * mm  # Adjust based on your logo's aspect ratio
+            try:
+                img = ImageReader(str(logo_path))
+                c.drawImage(
+                    img,
+                    30 * mm,
+                    height - 35 * mm,
+                    width=logo_width,
+                    height=logo_height,
+                    preserveAspectRatio=True,
+                    mask='auto'
+                )
+            except Exception:
+                # Fallback to text if image fails to load
+                c.setFont("Helvetica-Bold", 20)
+                c.drawString(30 * mm, height - 30 * mm, self.settings.business_name)
+        else:
+            # Fallback to text if logo doesn't exist
+            c.setFont("Helvetica-Bold", 20)
+            c.drawString(30 * mm, height - 30 * mm, self.settings.business_name)
 
         # Business details
         c.setFont("Helvetica", 10)
