@@ -9,8 +9,6 @@ A Telegram bot that generates professional PDF invoices from simple text message
 - 📊 Track cost price, sale price, and profit margins
 - ✅ Type-safe with Pydantic models
 - 🎨 Clean, formatted with Ruff
-- ☁️ Deploy to Vercel as serverless functions (webhook mode)
-- 🚀 Local development with polling mode
 
 ## Requirements
 
@@ -73,8 +71,6 @@ A Telegram bot that generates professional PDF invoices from simple text message
 
 ### Running the Bot
 
-**Local development (polling mode):**
-
 ```bash
 uv run python -m src.bot
 ```
@@ -83,10 +79,6 @@ Or directly:
 ```bash
 uv run python src/bot.py
 ```
-
-**Production (Vercel deployment):**
-
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete Vercel deployment instructions with webhooks.
 
 ### Message Format
 
@@ -157,15 +149,17 @@ uv run ruff check .
 
 ### Fix Linting Issues
 
+```bash
+uv run ruff check --fix .
+```
+
+### Add New Dependencies
+
 ```
 telegram-bot-accounting/
-├── api/
-│   └── webhook.py            # Vercel serverless function (webhook)
-├── scripts/
-│   └── setup_webhook.py      # Webhook configuration tool
 ├── src/
 │   ├── __init__.py           # Package init
-│   ├── bot.py                # Main bot logic (polling mode)
+│   ├── bot.py                # Main bot logic
 │   ├── config.py             # Pydantic settings
 │   ├── models.py             # Pydantic data models
 │   ├── parser.py             # Message parser
@@ -173,16 +167,6 @@ telegram-bot-accounting/
 ├── invoices/                 # Generated PDFs (auto-created)
 ├── .venv/                    # Virtual environment (uv managed)
 ├── .env                      # Environment variables (not in git)
-├── .env.example              # Environment template
-├── .gitignore                # Git ignore rules
-├── .vercelignore             # Vercel ignore rules
-├── pyproject.toml            # Project config & dependencies (uv)
-├── requirements.txt          # Requirements for Vercel
-├── uv.lock                   # Dependency lock file (uv)
-├── vercel.json               # Vercel configuration
-├── DEPLOYMENT.md             # Vercel deployment guide
-└── README.md                 # This file
-``` .env                      # Environment variables (not in git)
 ├── .env.example              # Environment template
 ├── .gitignore                # Git ignore rules
 ├── pyproject.toml            # Project config & dependencies (uv)
@@ -200,34 +184,7 @@ telegram-bot-accounting/
 ├── .gitignore                # Git ignore rules
 ├── pyproject.toml            # Project config & dependencies
 └── README.md                 # This file
-## Deployment
-
-### Vercel (Recommended for Production)
-
-Deploy to Vercel as a serverless function with webhooks:
-
-```bash
-# Install Vercel CLI
-npm i -g vercel
-
-# Deploy
-vercel --prod
-
-# Configure webhook
-uv run python scripts/setup_webhook.py https://your-app.vercel.app/api/webhook
 ```
-
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete deployment instructions.
-
-### Local Development
-
-For local development, the bot uses polling mode:
-
-```bash
-uv run python src/bot.py
-```
-
-## Troubleshooting
 
 ## GST Calculation
 
