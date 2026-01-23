@@ -18,18 +18,33 @@ class Settings(BaseSettings):
     )
 
     # Telegram Bot
-    telegram_bot_token: str = Field(..., description="Telegram bot token from @BotFather")
+    telegram_bot_token: str = Field(
+        ..., description="Telegram bot token from @BotFather"
+    )
+    telegram_chat_id: int | None = Field(
+        default=None, description="Your Telegram chat ID for automated reports"
+    )
 
     # Business Details
     business_name: str = Field(default="Your Business", description="Business name")
-    business_address: str = Field(default="Your Address", description="Business address")
+    business_address: str = Field(
+        default="Your Address", description="Business address"
+    )
     business_phone: str = Field(default="Your Phone", description="Business phone")
-    business_email: str = Field(default="contact@business.com", description="Business email")
-    business_registration: str = Field(default="", description="Business registration number")
+    business_email: str = Field(
+        default="contact@business.com", description="Business email"
+    )
+    business_registration: str = Field(
+        default="", description="Business registration number"
+    )
 
     # GST Configuration
-    gst_rate: Decimal = Field(default=Decimal("0.09"), description="GST rate (9% = 0.09)")
-    gst_threshold: Decimal = Field(default=Decimal("400.00"), description="GST threshold amount")
+    gst_rate: Decimal = Field(
+        default=Decimal("0.09"), description="GST rate (9% = 0.09)"
+    )
+    gst_threshold: Decimal = Field(
+        default=Decimal("400.00"), description="GST threshold amount"
+    )
 
     @property
     def invoices_dir(self) -> Path:

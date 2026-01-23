@@ -34,12 +34,16 @@ class InvoiceGenerator:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Generate client invoice (without cost price)
-        client_filename = f"invoice_{invoice_data.invoice_number}_{timestamp}_client.pdf"
+        client_filename = (
+            f"invoice_{invoice_data.invoice_number}_{timestamp}_client.pdf"
+        )
         client_filepath = self.settings.invoices_dir / client_filename
         self._generate_single_pdf(client_filepath, invoice_data, is_client=True)
 
         # Generate internal invoice (with cost price and profit)
-        internal_filename = f"invoice_{invoice_data.invoice_number}_{timestamp}_internal.pdf"
+        internal_filename = (
+            f"invoice_{invoice_data.invoice_number}_{timestamp}_internal.pdf"
+        )
         internal_filepath = self.settings.invoices_dir / internal_filename
         self._generate_single_pdf(internal_filepath, invoice_data, is_client=False)
 
@@ -84,7 +88,7 @@ class InvoiceGenerator:
                     width=logo_width,
                     height=logo_height,
                     preserveAspectRatio=True,
-                    mask='auto'
+                    mask="auto",
                 )
             except Exception:
                 # Fallback to text if image fails to load
@@ -181,7 +185,12 @@ class InvoiceGenerator:
                     # Grid
                     ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
                     # Alternating rows
-                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+                    (
+                        "ROWBACKGROUNDS",
+                        (0, 1),
+                        (-1, -1),
+                        [colors.white, colors.lightgrey],
+                    ),
                 ]
             )
         )
@@ -235,7 +244,12 @@ class InvoiceGenerator:
                     # Grid
                     ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
                     # Alternating rows
-                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+                    (
+                        "ROWBACKGROUNDS",
+                        (0, 1),
+                        (-1, -1),
+                        [colors.white, colors.lightgrey],
+                    ),
                 ]
             )
         )
