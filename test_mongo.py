@@ -55,7 +55,9 @@ def test_mongo():
     print(f"  Amount Received: ${daily['total_received']:.2f}")
     print(f"  Outstanding: ${daily['total_outstanding']:.2f}")
     print(f"  Total Profit: ${daily['total_profit']:.2f}")
-    print(f"  Payment Status: {daily['paid_count']} paid, {daily['partial_count']} partial, {daily['unpaid_count']} unpaid")
+    print(
+        f"  Payment Status: {daily['paid_count']} paid, {daily['partial_count']} partial, {daily['unpaid_count']} unpaid"
+    )
 
     print("\n✅ MongoDB storage test completed successfully!")
 

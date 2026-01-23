@@ -88,7 +88,9 @@ class MessageParser:
                         items.append(item)
 
             if not items:
-                raise MessageParseError("No items found. Use format: Item | Cost | Sale | Qty")
+                raise MessageParseError(
+                    "No items found. Use format: Item | Cost | Sale | Qty"
+                )
 
             # Create invoice with calculated totals
             return InvoiceData.create(
@@ -104,7 +106,9 @@ class MessageParser:
             for error in e.errors():
                 field = " -> ".join(str(loc) for loc in error["loc"])
                 error_messages.append(f"{field}: {error['msg']}")
-            raise MessageParseError(f"Validation error: {'; '.join(error_messages)}") from e
+            raise MessageParseError(
+                f"Validation error: {'; '.join(error_messages)}"
+            ) from e
         except MessageParseError:
             raise
         except Exception as e:

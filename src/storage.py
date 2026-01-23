@@ -127,8 +127,12 @@ class InvoiceStorage:
 
         # Count payment statuses
         paid_count = sum(1 for inv in invoices if inv.get("payment_status") == "PAID")
-        partial_count = sum(1 for inv in invoices if inv.get("payment_status") == "PARTIAL")
-        unpaid_count = sum(1 for inv in invoices if inv.get("payment_status") == "UNPAID")
+        partial_count = sum(
+            1 for inv in invoices if inv.get("payment_status") == "PARTIAL"
+        )
+        unpaid_count = sum(
+            1 for inv in invoices if inv.get("payment_status") == "UNPAID"
+        )
 
         return {
             "total_invoices": len(invoices),

@@ -298,13 +298,17 @@ class InvoiceGenerator:
         if invoice_data.totals.deposit_paid > 0:
             c.setFont("Helvetica", 10)
             c.drawString(x, y, "Deposit Paid:")
-            c.drawRightString(width - 30 * mm, y, f"${invoice_data.totals.deposit_paid:.2f}")
+            c.drawRightString(
+                width - 30 * mm, y, f"${invoice_data.totals.deposit_paid:.2f}"
+            )
             y -= 6 * mm
 
             # Balance due with emphasis
             c.setFont("Helvetica-Bold", 11)
             c.drawString(x, y, "Balance Due:")
-            c.drawRightString(width - 30 * mm, y, f"${invoice_data.totals.balance_due:.2f}")
+            c.drawRightString(
+                width - 30 * mm, y, f"${invoice_data.totals.balance_due:.2f}"
+            )
             y -= 8 * mm
 
             # Payment status

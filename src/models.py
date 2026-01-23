@@ -47,7 +47,9 @@ class InvoiceTotals(BaseModel):
     grand_total: Decimal = Field(..., description="Grand total including GST")
     total_cost: Decimal = Field(..., description="Total cost of all items")
     total_profit: Decimal = Field(..., description="Total profit")
-    deposit_paid: Decimal = Field(default=Decimal("0"), ge=0, description="Deposit amount paid")
+    deposit_paid: Decimal = Field(
+        default=Decimal("0"), ge=0, description="Deposit amount paid"
+    )
     balance_due: Decimal = Field(..., description="Remaining balance due")
 
     @property
@@ -72,7 +74,9 @@ class InvoiceData(BaseModel):
     invoice_number: str = Field(..., description="Unique invoice number")
     date: str = Field(..., description="Invoice date")
     customer_name: str | None = Field(None, description="Customer name")
-    items: list[InvoiceItem] = Field(..., min_length=1, description="List of invoice items")
+    items: list[InvoiceItem] = Field(
+        ..., min_length=1, description="List of invoice items"
+    )
     totals: InvoiceTotals = Field(..., description="Invoice totals")
 
     @classmethod

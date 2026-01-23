@@ -22,6 +22,7 @@ from .storage import InvoiceStorage
 
 try:
     from .mongo_storage import MongoInvoiceStorage
+
     MONGO_AVAILABLE = True
 except ImportError:
     MONGO_AVAILABLE = False

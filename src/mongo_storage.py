@@ -19,7 +19,7 @@ class MongoInvoiceStorage:
         self.client = MongoClient(mongo_uri)
         self.db: Database = self.client[database_name]
         self.invoices: Collection = self.db["invoices"]
-        
+
         # Create indexes for better query performance
         self.invoices.create_index("chat_id")
         self.invoices.create_index("timestamp")
@@ -118,8 +118,12 @@ class MongoInvoiceStorage:
 
         # Count payment statuses
         paid_count = sum(1 for inv in invoices if inv.get("payment_status") == "PAID")
-        partial_count = sum(1 for inv in invoices if inv.get("payment_status") == "PARTIAL")
-        unpaid_count = sum(1 for inv in invoices if inv.get("payment_status") == "UNPAID")
+        partial_count = sum(
+            1 for inv in invoices if inv.get("payment_status") == "PARTIAL"
+        )
+        unpaid_count = sum(
+            1 for inv in invoices if inv.get("payment_status") == "UNPAID"
+        )
 
         return {
             "total_invoices": len(invoices),

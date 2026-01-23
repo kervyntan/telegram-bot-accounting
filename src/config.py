@@ -26,9 +26,7 @@ class Settings(BaseSettings):
     )
 
     # MongoDB Configuration
-    mongodb_uri: str | None = Field(
-        default=None, description="MongoDB connection URI"
-    )
+    mongodb_uri: str | None = Field(default=None, description="MongoDB connection URI")
     mongodb_database: str = Field(
         default="telegram_bot", description="MongoDB database name"
     )
