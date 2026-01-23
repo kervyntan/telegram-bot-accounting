@@ -20,6 +20,12 @@ from .parser import MessageParseError, MessageParser
 from .pdf_generator import InvoiceGenerator
 from .storage import InvoiceStorage
 
+try:
+    from .mongo_storage import MongoInvoiceStorage
+    MONGO_AVAILABLE = True
+except ImportError:
+    MONGO_AVAILABLE = False
+
 # Configure logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -40,9 +46,17 @@ class InvoiceBot:
         self.parser = MessageParser(settings.gst_rate, settings.gst_threshold)
         self.generator = InvoiceGenerator(settings)
 
-        # Initialize storage
-        storage_path = settings.invoices_dir / "invoice_records.json"
-        self.storage = InvoiceStorage(storage_path)
+        # Initialize storage (prefer MongoDB if configured)
+        if settings.mongodb_uri and MONGO_AVAILABLE:
+            logger.info("Using MongoDB for invoice storage")
+            self.storage = MongoInvoiceStorage(
+                settings.mongodb_uri,
+                settings.mongodb_database,
+            )
+        else:
+            logger.info("Using JSON file storage for invoices")
+            storage_path = settings.invoices_dir / "invoice_records.json"
+            self.storage = InvoiceStorage(storage_path)
 
         # Build application
         self.app = Application.builder().token(settings.telegram_bot_token).build()
@@ -208,6 +222,7 @@ Reports will be sent automatically at 7 PM SGT."""
 
         lines.extend(
             [
+                "",
                 f"💵 Subtotal: ${invoice_data.totals.subtotal:.2f}",
             ]
         )
@@ -215,9 +230,22 @@ Reports will be sent automatically at 7 PM SGT."""
         if invoice_data.totals.gst > 0:
             lines.append(f"📊 GST: ${invoice_data.totals.gst:.2f}")
 
+        lines.append(f"💰 Grand Total: ${invoice_data.totals.grand_total:.2f}")
+
+        # Show deposit and balance if applicable
+        if invoice_data.totals.deposit_paid > 0:
+            lines.extend(
+                [
+                    "",
+                    f"💸 Deposit Paid: ${invoice_data.totals.deposit_paid:.2f}",
+                    f"📋 Balance Due: ${invoice_data.totals.balance_due:.2f}",
+                    f"📌 Status: {invoice_data.totals.payment_status}",
+                ]
+            )
+
         lines.extend(
             [
-                f"💰 Grand Total: ${invoice_data.totals.grand_total:.2f}",
+                "",
                 f"📈 Profit: ${invoice_data.totals.total_profit:.2f}",
             ]
         )
@@ -310,12 +338,25 @@ Reports will be sent automatically at 7 PM SGT."""
                     f"📝 Total Invoices: {summary['total_invoices']}",
                     "",
                     f"💵 Total Revenue: ${summary['total_revenue']:.2f}",
+                    f"💸 Amount Received: ${summary['total_received']:.2f}",
+                    f"📅 Outstanding: ${summary['total_outstanding']:.2f}",
+                    "",
                     f"💰 Total Cost: ${summary['total_cost']:.2f}",
                     f"📈 Total Profit: ${summary['total_profit']:.2f}",
                     f"📊 Total GST: ${summary['total_gst']:.2f}",
                     "",
                 ]
             )
+            # Add payment status breakdown
+            if summary["paid_count"] > 0 or summary["partial_count"] > 0:
+                lines.append("📄 *Payment Status:*")
+                if summary["paid_count"] > 0:
+                    lines.append(f"  ✅ Paid: {summary['paid_count']}")
+                if summary["partial_count"] > 0:
+                    lines.append(f"  🔶 Partial: {summary['partial_count']}")
+                if summary["unpaid_count"] > 0:
+                    lines.append(f"  ⏳ Unpaid: {summary['unpaid_count']}")
+                lines.append("")
             # Add profit margin
             if summary["total_revenue"] > 0:
                 margin = summary["total_profit"] / summary["total_revenue"] * 100
@@ -343,12 +384,25 @@ Reports will be sent automatically at 7 PM SGT."""
                     f"📝 Total Invoices: {summary['total_invoices']}",
                     "",
                     f"💵 Total Revenue: ${summary['total_revenue']:.2f}",
+                    f"💸 Amount Received: ${summary['total_received']:.2f}",
+                    f"📅 Outstanding: ${summary['total_outstanding']:.2f}",
+                    "",
                     f"💰 Total Cost: ${summary['total_cost']:.2f}",
                     f"📈 Total Profit: ${summary['total_profit']:.2f}",
                     f"📊 Total GST: ${summary['total_gst']:.2f}",
                     "",
                 ]
             )
+            # Add payment status breakdown
+            if summary["paid_count"] > 0 or summary["partial_count"] > 0:
+                lines.append("📄 *Payment Status:*")
+                if summary["paid_count"] > 0:
+                    lines.append(f"  ✅ Paid: {summary['paid_count']}")
+                if summary["partial_count"] > 0:
+                    lines.append(f"  🔶 Partial: {summary['partial_count']}")
+                if summary["unpaid_count"] > 0:
+                    lines.append(f"  ⏳ Unpaid: {summary['unpaid_count']}")
+                lines.append("")
             # Add profit margin and average
             if summary["total_revenue"] > 0:
                 margin = summary["total_profit"] / summary["total_revenue"] * 100

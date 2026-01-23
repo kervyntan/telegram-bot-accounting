@@ -59,6 +59,7 @@ class MessageParser:
 
             customer_name: str | None = None
             items: list[InvoiceItem] = []
+            deposit_paid = Decimal("0")
 
             for line in lines:
                 # Skip common headers
@@ -68,6 +69,12 @@ class MessageParser:
                 # Parse customer name
                 if line.lower().startswith("customer:"):
                     customer_name = line[9:].strip()
+                    continue
+
+                # Parse deposit amount
+                if line.lower().startswith("deposit:"):
+                    deposit_str = line[8:].strip()
+                    deposit_paid = self._parse_price(deposit_str)
                     continue
 
                 # Skip header rows with "item" and "price"
@@ -89,6 +96,7 @@ class MessageParser:
                 items=items,
                 gst_rate=self.gst_rate,
                 gst_threshold=self.gst_threshold,
+                deposit_paid=deposit_paid,
             )
 
         except ValidationError as e:
@@ -155,6 +163,7 @@ To generate an invoice, send me a message in this format:
 
 ```
 Customer: John Doe
+Deposit: 50.00
 ---
 Item Name | Cost Price | Sale Price | Quantity
 Product A | 10.00 | 15.00 | 2
@@ -162,13 +171,22 @@ Product B | 25.50 | 35.00 | 1
 ---
 ```
 
-*Example:*
+*Example with full payment:*
 ```
 Customer: Jane Smith
 ---
 Laptop Case | 15 | 25 | 1
 USB Cable | 2.50 | 5 | 3
 Mouse Pad | 3 | 8 | 2
+```
+
+*Example with deposit:*
+```
+Customer: Mike Johnson
+Deposit: 100
+---
+Gaming Keyboard | 50 | 120 | 1
+Gaming Mouse | 30 | 80 | 1
 ```
 
 *Notes:*

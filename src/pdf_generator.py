@@ -292,7 +292,31 @@ class InvoiceGenerator:
         c.setFont("Helvetica-Bold", 12)
         c.drawString(x, y, "Grand Total:")
         c.drawRightString(width - 30 * mm, y, f"${invoice_data.totals.grand_total:.2f}")
-        y -= 10 * mm
+        y -= 8 * mm
+
+        # Deposit and balance
+        if invoice_data.totals.deposit_paid > 0:
+            c.setFont("Helvetica", 10)
+            c.drawString(x, y, "Deposit Paid:")
+            c.drawRightString(width - 30 * mm, y, f"${invoice_data.totals.deposit_paid:.2f}")
+            y -= 6 * mm
+
+            # Balance due with emphasis
+            c.setFont("Helvetica-Bold", 11)
+            c.drawString(x, y, "Balance Due:")
+            c.drawRightString(width - 30 * mm, y, f"${invoice_data.totals.balance_due:.2f}")
+            y -= 8 * mm
+
+            # Payment status
+            c.setFont("Helvetica", 9)
+            status = invoice_data.totals.payment_status
+            status_color = colors.green if status == "PAID" else colors.orange
+            c.setFillColor(status_color)
+            c.drawString(x, y, f"Status: {status}")
+            c.setFillColor(colors.black)
+            y -= 6 * mm
+        else:
+            y -= 6 * mm
 
         # Profit information (only for internal invoice)
         if not is_client:

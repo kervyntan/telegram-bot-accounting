@@ -25,6 +25,14 @@ class Settings(BaseSettings):
         default=None, description="Your Telegram chat ID for automated reports"
     )
 
+    # MongoDB Configuration
+    mongodb_uri: str | None = Field(
+        default=None, description="MongoDB connection URI"
+    )
+    mongodb_database: str = Field(
+        default="telegram_bot", description="MongoDB database name"
+    )
+
     # Business Details
     business_name: str = Field(default="Your Business", description="Business name")
     business_address: str = Field(

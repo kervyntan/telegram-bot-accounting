@@ -47,6 +47,23 @@ class InvoiceTotals(BaseModel):
     grand_total: Decimal = Field(..., description="Grand total including GST")
     total_cost: Decimal = Field(..., description="Total cost of all items")
     total_profit: Decimal = Field(..., description="Total profit")
+    deposit_paid: Decimal = Field(default=Decimal("0"), ge=0, description="Deposit amount paid")
+    balance_due: Decimal = Field(..., description="Remaining balance due")
+
+    @property
+    def is_fully_paid(self) -> bool:
+        """Check if invoice is fully paid."""
+        return self.balance_due == 0
+
+    @property
+    def payment_status(self) -> str:
+        """Get payment status string."""
+        if self.is_fully_paid:
+            return "PAID"
+        elif self.deposit_paid > 0:
+            return "PARTIAL"
+        else:
+            return "UNPAID"
 
 
 class InvoiceData(BaseModel):
@@ -65,6 +82,7 @@ class InvoiceData(BaseModel):
         items: list[InvoiceItem],
         gst_rate: Decimal,
         gst_threshold: Decimal,
+        deposit_paid: Decimal = Decimal("0"),
     ) -> "InvoiceData":
         """Create invoice data with calculated totals."""
         # Calculate totals
@@ -78,6 +96,7 @@ class InvoiceData(BaseModel):
             gst = subtotal * gst_rate
 
         grand_total = subtotal + gst
+        balance_due = grand_total - deposit_paid
 
         # Generate invoice number
         invoice_number = cls.generate_invoice_number()
@@ -91,6 +110,8 @@ class InvoiceData(BaseModel):
             grand_total=grand_total.quantize(Decimal("0.01")),
             total_cost=total_cost.quantize(Decimal("0.01")),
             total_profit=total_profit.quantize(Decimal("0.01")),
+            deposit_paid=deposit_paid.quantize(Decimal("0.01")),
+            balance_due=balance_due.quantize(Decimal("0.01")),
         )
 
         return cls(

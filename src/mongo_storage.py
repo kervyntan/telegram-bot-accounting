@@ -1,47 +1,36 @@
-"""Storage for invoice records using JSON."""
+"""MongoDB storage for invoice records."""
 
-import json
 from datetime import datetime, timedelta
 from decimal import Decimal
-from pathlib import Path
 from typing import Any
+
+from pymongo import MongoClient
+from pymongo.collection import Collection
+from pymongo.database import Database
 
 from .models import InvoiceData
 
 
-class InvoiceStorage:
-    """Store and retrieve invoice records."""
+class MongoInvoiceStorage:
+    """Store and retrieve invoice records using MongoDB."""
 
-    def __init__(self, storage_path: Path) -> None:
-        """Initialize storage with file path."""
-        self.storage_path = storage_path
-        self.storage_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Initialize file if it doesn't exist
-        if not self.storage_path.exists():
-            self._save_data([])
-
-    def _load_data(self) -> list[dict[str, Any]]:
-        """Load invoice records from file."""
-        try:
-            with open(self.storage_path) as f:
-                return json.load(f)
-        except (json.JSONDecodeError, FileNotFoundError):
-            return []
-
-    def _save_data(self, data: list[dict[str, Any]]) -> None:
-        """Save invoice records to file."""
-        with open(self.storage_path, "w") as f:
-            json.dump(data, f, indent=2, default=str)
+    def __init__(self, mongo_uri: str, database_name: str = "telegram_bot") -> None:
+        """Initialize MongoDB connection."""
+        self.client = MongoClient(mongo_uri)
+        self.db: Database = self.client[database_name]
+        self.invoices: Collection = self.db["invoices"]
+        
+        # Create indexes for better query performance
+        self.invoices.create_index("chat_id")
+        self.invoices.create_index("timestamp")
+        self.invoices.create_index([("chat_id", 1), ("timestamp", -1)])
 
     def add_invoice(self, invoice_data: InvoiceData, chat_id: int) -> None:
-        """Add an invoice record."""
-        data = self._load_data()
-
+        """Add an invoice record to MongoDB."""
         record = {
             "invoice_number": invoice_data.invoice_number,
             "date": invoice_data.date,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(),
             "chat_id": chat_id,
             "customer_name": invoice_data.customer_name,
             "subtotal": float(invoice_data.totals.subtotal),
@@ -53,35 +42,37 @@ class InvoiceStorage:
             "total_cost": float(invoice_data.totals.total_cost),
             "total_profit": float(invoice_data.totals.total_profit),
             "items_count": len(invoice_data.items),
+            "items": [
+                {
+                    "name": item.name,
+                    "cost_price": float(item.cost_price),
+                    "sale_price": float(item.sale_price),
+                    "quantity": item.quantity,
+                    "amount": float(item.amount),
+                }
+                for item in invoice_data.items
+            ],
         }
 
-        data.append(record)
-        self._save_data(data)
+        self.invoices.insert_one(record)
 
     def get_invoices_by_date_range(
         self, chat_id: int, start_date: datetime, end_date: datetime
     ) -> list[dict[str, Any]]:
         """Get invoices within a date range for a specific chat."""
-        data = self._load_data()
+        # Remove timezone info for comparison if present
+        if start_date.tzinfo is not None:
+            start_date = start_date.replace(tzinfo=None)
+        if end_date.tzinfo is not None:
+            end_date = end_date.replace(tzinfo=None)
 
-        filtered = []
-        for record in data:
-            if record["chat_id"] != chat_id:
-                continue
+        query = {
+            "chat_id": chat_id,
+            "timestamp": {"$gte": start_date, "$lt": end_date},
+        }
 
-            # Parse timestamp and make it timezone-aware if needed
-            record_dt = datetime.fromisoformat(record["timestamp"])
-            if record_dt.tzinfo is None and start_date.tzinfo is not None:
-                # Assume stored timestamps are in the same timezone as start_date
-                record_dt = record_dt.replace(tzinfo=start_date.tzinfo)
-            elif record_dt.tzinfo is not None and start_date.tzinfo is None:
-                # Remove timezone info from record to match naive datetime
-                record_dt = record_dt.replace(tzinfo=None)
-
-            if start_date <= record_dt < end_date:
-                filtered.append(record)
-
-        return filtered
+        cursor = self.invoices.find(query).sort("timestamp", -1)
+        return list(cursor)
 
     def get_daily_summary(self, chat_id: int, date: datetime) -> dict[str, Any]:
         """Get summary for a specific day."""
@@ -143,3 +134,7 @@ class InvoiceStorage:
             "unpaid_count": unpaid_count,
             "invoices": invoices,
         }
+
+    def close(self) -> None:
+        """Close MongoDB connection."""
+        self.client.close()
