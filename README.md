@@ -1,12 +1,15 @@
 # Telegram Invoice Bot
 
-A Telegram bot that generates professional PDF invoices from simple text messages. Built with Python, Pydantic for type safety, and ReportLab for PDF generation.
+A Telegram bot that generates professional PDF invoices from simple text messages with automated daily and weekly P/L reports. Built with Python, Pydantic for type safety, and ReportLab for PDF generation.
 
 ## Features
 
-- 📄 Generate PDF invoices from forwarded messages
+- 📄 Generate PDF invoices from forwarded messages (client & internal versions)
 - 💰 Automatic GST calculation (applies when total ≥ $400)
 - 📊 Track cost price, sale price, and profit margins
+- 📈 Automated daily reports at 7 PM SGT
+- 📅 Automated weekly reports every Friday at 7 PM SGT
+- 🔍 Manual P/L summaries with `/daily` and `/weekly` commands
 - ✅ Type-safe with Pydantic models
 - 🎨 Clean, formatted with Ruff
 
@@ -50,6 +53,9 @@ A Telegram bot that generates professional PDF invoices from simple text message
    # Get token from @BotFather on Telegram
    TELEGRAM_BOT_TOKEN=your_bot_token_here
 
+   # Your chat ID for automated reports (get it with /chatid command)
+   TELEGRAM_CHAT_ID=
+
    # Your business details
    BUSINESS_NAME=Your Business Name
    BUSINESS_ADDRESS=123 Business Street, City
@@ -66,6 +72,12 @@ A Telegram bot that generates professional PDF invoices from simple text message
    - Open Telegram and search for [@BotFather](https://t.me/botfather)
    - Send `/newbot` and follow the instructions
    - Copy the token and paste it in your `.env` file
+
+4. **Get your Chat ID** (for automated reports):
+   - Start your bot with `/start`
+   - Send `/chatid` to the bot
+   - Copy the chat ID and add it to your `.env` file
+   - Restart the bot to enable automated reports
 
 ## Usage
 
@@ -111,8 +123,19 @@ USB Cable | 2.50 | 5 | 3
 
 ### Bot Commands
 
-- `/start` - Welcome message
-- `/help` - Show format instructions and examples
+- `/start` - Welcome message and feature overview
+- `/help` - Show invoice format instructions and examples
+- `/chatid` - Get your chat ID for automated reports
+- `/daily` - Get today's P/L summary (manual trigger)
+- `/weekly` - Get this week's P/L summary (manual trigger)
+
+### Automated Reports
+
+The bot automatically sends:
+- **Daily report** at 7:00 PM SGT with the day's P/L
+- **Weekly report** every Friday at 7:00 PM SGT with the week's P/L
+
+See [REPORTS.md](REPORTS.md) for detailed documentation on reports.
 
 ### How It Works
 
@@ -120,18 +143,22 @@ USB Cable | 2.50 | 5 | 3
 2. Bot parses the message and validates data with Pydantic
 3. Calculates totals, costs, and profits
 4. Applies GST if subtotal ≥ threshold
-5. Generates a professional PDF invoice
-6. Sends the PDF back to you
+5. Generates two professional PDF invoices:
+   - **Client PDF**: For customers (no cost prices or profit)
+   - **Internal PDF**: For your records (includes cost & profit)
+6. Sends both PDFs back to you
+7. Stores invoice data for reports
 
 ## Invoice Details
 
-The generated PDF includes:
-- Business information (header)
+The generated PDFs include:
+- Business logo (if provided in `assets/logo.jpg`)
+- Business information (address, phone, email)
 - Invoice number and date
 - Customer name (if provided)
-- Itemized list with cost/sale prices
+- Itemized list with prices
 - Subtotal, GST (if applicable), and grand total
-- Total cost and profit breakdown
+- Total cost and profit breakdown (internal PDF only)
 
 ## Development
 

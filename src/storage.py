@@ -61,12 +61,22 @@ class InvoiceStorage:
         """Get invoices within a date range for a specific chat."""
         data = self._load_data()
 
-        filtered = [
-            record
-            for record in data
-            if record["chat_id"] == chat_id
-            and start_date <= datetime.fromisoformat(record["timestamp"]) < end_date
-        ]
+        filtered = []
+        for record in data:
+            if record["chat_id"] != chat_id:
+                continue
+
+            # Parse timestamp and make it timezone-aware if needed
+            record_dt = datetime.fromisoformat(record["timestamp"])
+            if record_dt.tzinfo is None and start_date.tzinfo is not None:
+                # Assume stored timestamps are in the same timezone as start_date
+                record_dt = record_dt.replace(tzinfo=start_date.tzinfo)
+            elif record_dt.tzinfo is not None and start_date.tzinfo is None:
+                # Remove timezone info from record to match naive datetime
+                record_dt = record_dt.replace(tzinfo=None)
+
+            if start_date <= record_dt < end_date:
+                filtered.append(record)
 
         return filtered
 
