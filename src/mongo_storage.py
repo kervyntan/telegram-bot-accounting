@@ -142,14 +142,14 @@ class MongoInvoiceStorage:
     def get_all_invoices(self, chat_id: str) -> dict[str, Any]:
         """Get all-time summary for inception report."""
         invoices = list(
-            self.collection.find({"chat_id": chat_id}).sort("timestamp", ASCENDING)
+            self.invoices.find({"chat_id": chat_id}).sort("timestamp", ASCENDING)
         )
         return self._calculate_summary(invoices)
 
     def get_partial_invoices(self, chat_id: str) -> list[dict[str, Any]]:
         """Get all invoices with partial payment status."""
         return list(
-            self.collection.find(
+            self.invoices.find(
                 {"chat_id": chat_id, "payment_status": "PARTIAL"}
             ).sort("timestamp", DESCENDING)
         )
@@ -158,7 +158,7 @@ class MongoInvoiceStorage:
         self, invoice_number: str, new_deposit: float
     ) -> bool:
         """Update deposit amount and recalculate payment status for an invoice."""
-        invoice = self.collection.find_one({"invoice_number": invoice_number})
+        invoice = self.invoices.find_one({"invoice_number": invoice_number})
         if not invoice:
             return False
 
@@ -175,7 +175,7 @@ class MongoInvoiceStorage:
         else:
             payment_status = "UNPAID"
 
-        result = self.collection.update_one(
+        result = self.invoices.update_one(
             {"invoice_number": invoice_number},
             {
                 "$set": {
