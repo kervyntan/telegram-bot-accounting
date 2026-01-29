@@ -147,3 +147,50 @@ class InvoiceStorage:
             "unpaid_count": unpaid_count,
             "invoices": invoices,
         }
+
+    def get_all_invoices(self, chat_id: int) -> dict[str, Any]:
+        """Get all-time summary for inception report."""
+        data = self._load_data()
+        invoices = [record for record in data if record["chat_id"] == chat_id]
+        return self._calculate_summary(invoices)
+
+    def get_partial_invoices(self, chat_id: int) -> list[dict[str, Any]]:
+        """Get all invoices with partial payment status."""
+        data = self._load_data()
+        return [
+            record
+            for record in data
+            if record["chat_id"] == chat_id
+            and record.get("payment_status") == "PARTIAL"
+        ]
+
+    def update_invoice_payment(
+        self, invoice_number: str, new_deposit: float
+    ) -> bool:
+        """Update deposit amount and recalculate payment status for an invoice."""
+        data = self._load_data()
+
+        for record in data:
+            if record["invoice_number"] == invoice_number:
+                grand_total = Decimal(str(record["grand_total"]))
+                new_deposit_decimal = Decimal(str(new_deposit))
+                balance_due = grand_total - new_deposit_decimal
+
+                # Determine payment status
+                if new_deposit_decimal >= grand_total:
+                    payment_status = "PAID"
+                    balance_due = Decimal("0")
+                elif new_deposit_decimal > 0:
+                    payment_status = "PARTIAL"
+                else:
+                    payment_status = "UNPAID"
+
+                record["deposit_paid"] = float(new_deposit_decimal)
+                record["balance_due"] = float(balance_due)
+                record["payment_status"] = payment_status
+
+                self._save_data(data)
+                return True
+
+        return False
+

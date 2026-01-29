@@ -128,6 +128,39 @@ USB Cable | 2.50 | 5 | 3
 - `/chatid` - Get your chat ID for automated reports
 - `/daily` - Get today's P/L summary (manual trigger)
 - `/weekly` - Get this week's P/L summary (manual trigger)
+- `/inception` - Get all-time P/L summary from the beginning
+- `/partial` - List all invoices with partial payments
+- `/payment <invoice_number> <amount>` - Update deposit amount for an invoice
+
+### Payment Management
+
+The bot now supports deposit tracking and payment updates:
+
+**Add deposit when creating invoice:**
+```
+Customer: John Doe
+Deposit: 150.00
+---
+Item Name | Cost Price | Sale Price | Quantity
+Laptop | 500 | 800 | 1
+```
+
+**View partial payment invoices:**
+```
+/partial
+```
+
+**Update payment on an invoice:**
+```
+/payment INV-001 500.00
+```
+
+The bot automatically tracks:
+- **PAID**: Full payment received
+- **PARTIAL**: Some payment received, balance outstanding
+- **UNPAID**: No payment received yet
+
+See [DEPOSIT_FEATURE.md](DEPOSIT_FEATURE.md) for detailed documentation on payment tracking.
 
 ### Automated Reports
 

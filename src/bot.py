@@ -68,6 +68,9 @@ class InvoiceBot:
         self.app.add_handler(CommandHandler("chatid", self.chatid_command))
         self.app.add_handler(CommandHandler("daily", self.daily_report_command))
         self.app.add_handler(CommandHandler("weekly", self.weekly_report_command))
+        self.app.add_handler(CommandHandler("inception", self.inception_report_command))
+        self.app.add_handler(CommandHandler("partial", self.partial_invoices_command))
+        self.app.add_handler(CommandHandler("payment", self.update_payment_command))
         self.app.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message)
         )
@@ -103,6 +106,9 @@ I can help you generate professional invoices from simple messages.
 /chatid - Get your chat ID for automated reports
 /daily - Get today's P/L summary
 /weekly - Get this week's P/L summary
+/inception - Get all-time P/L summary
+/partial - Show all partial payment invoices
+/payment - Update payment on an invoice
 
 📊 Automatic Reports:
 • Daily report sent at 7 PM SGT
@@ -414,6 +420,144 @@ Reports will be sent automatically at 7 PM SGT."""
                 lines.append("📊 Profit Margin: N/A")
 
         return "\n".join(lines)
+
+    async def inception_report_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Handle /inception command - all-time P/L report."""
+        if not update.message:
+            return
+
+        chat_id = str(update.message.chat_id)
+        summary = self.storage.get_all_invoices(chat_id)
+
+        lines = [
+            "📊 *Inception P/L Report*",
+            "📅 All-Time Summary",
+            "",
+        ]
+
+        if summary["total_invoices"] == 0:
+            lines.append("No invoices generated yet.")
+        else:
+            lines.extend(
+                [
+                    f"📝 Total Invoices: {summary['total_invoices']}",
+                    "",
+                    f"💵 Total Revenue: ${summary['total_revenue']:.2f}",
+                    f"💸 Amount Received: ${summary['total_received']:.2f}",
+                    f"📅 Outstanding: ${summary['total_outstanding']:.2f}",
+                    "",
+                    f"💰 Total Cost: ${summary['total_cost']:.2f}",
+                    f"📈 Total Profit: ${summary['total_profit']:.2f}",
+                    f"📊 Total GST: ${summary['total_gst']:.2f}",
+                    "",
+                ]
+            )
+            # Add payment status breakdown
+            if summary["paid_count"] > 0 or summary["partial_count"] > 0:
+                lines.append("📄 *Payment Status:*")
+                if summary["paid_count"] > 0:
+                    lines.append(f"  ✅ Paid: {summary['paid_count']}")
+                if summary["partial_count"] > 0:
+                    lines.append(f"  🔶 Partial: {summary['partial_count']}")
+                if summary["unpaid_count"] > 0:
+                    lines.append(f"  ⏳ Unpaid: {summary['unpaid_count']}")
+                lines.append("")
+            # Add profit margin and average
+            if summary["total_revenue"] > 0:
+                margin = summary["total_profit"] / summary["total_revenue"] * 100
+                lines.append(f"📊 Profit Margin: {margin:.1f}%")
+                avg = summary["total_revenue"] / summary["total_invoices"]
+                lines.append(f"📊 Average Invoice Value: ${avg:.2f}")
+
+        message = "\n".join(lines)
+        await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+
+    async def partial_invoices_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Handle /partial command - show all partial payment invoices."""
+        if not update.message:
+            return
+
+        chat_id = str(update.message.chat_id)
+        invoices = self.storage.get_partial_invoices(chat_id)
+
+        lines = [
+            "📋 *Partial Payment Invoices*",
+            "",
+        ]
+
+        if not invoices:
+            lines.append("No invoices with partial payments found.")
+        else:
+            lines.append(f"Found {len(invoices)} invoice(s) with partial payments:")
+            lines.append("")
+            for inv in invoices:
+                date_str = inv["timestamp"].strftime("%Y-%m-%d")
+                lines.extend(
+                    [
+                        f"🔸 Invoice: *{inv['invoice_number']}*",
+                        f"  👤 Customer: {inv['customer_name']}",
+                        f"  📅 Date: {date_str}",
+                        f"  💵 Grand Total: ${inv['grand_total']:.2f}",
+                        f"  💸 Paid: ${inv['deposit_paid']:.2f}",
+                        f"  📅 Balance Due: ${inv['balance_due']:.2f}",
+                        "",
+                    ]
+                )
+
+        message = "\n".join(lines)
+        await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+
+    async def update_payment_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Handle /payment command - update deposit amount for an invoice."""
+        if not update.message or not context.args:
+            help_message = (
+                "Usage: /payment <invoice_number> <new_deposit_amount>\n\n"
+                "Example: /payment INV-001 500.00"
+            )
+            if update.message:
+                await update.message.reply_text(help_message)
+            return
+
+        if len(context.args) < 2:
+            await update.message.reply_text(
+                "Please provide both invoice number and deposit amount.\n"
+                "Example: /payment INV-001 500.00"
+            )
+            return
+
+        invoice_number = context.args[0]
+        try:
+            new_deposit = float(context.args[1])
+            if new_deposit < 0:
+                await update.message.reply_text("Deposit amount cannot be negative.")
+                return
+        except ValueError:
+            await update.message.reply_text(
+                "Invalid deposit amount. Please provide a valid number.\n"
+                "Example: /payment INV-001 500.00"
+            )
+            return
+
+        success = self.storage.update_invoice_payment(invoice_number, new_deposit)
+
+        if success:
+            await update.message.reply_text(
+                f"✅ Successfully updated payment for invoice *{invoice_number}*\n"
+                f"New deposit amount: ${new_deposit:.2f}",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+        else:
+            await update.message.reply_text(
+                f"❌ Invoice *{invoice_number}* not found.\n"
+                "Please check the invoice number and try again.",
+                parse_mode=ParseMode.MARKDOWN,
+            )
 
     def run(self) -> None:
         """Run the bot."""

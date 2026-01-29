@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from pymongo import MongoClient
+from pymongo import ASCENDING, DESCENDING, MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
 
@@ -138,6 +138,55 @@ class MongoInvoiceStorage:
             "unpaid_count": unpaid_count,
             "invoices": invoices,
         }
+
+    def get_all_invoices(self, chat_id: str) -> dict[str, Any]:
+        """Get all-time summary for inception report."""
+        invoices = list(
+            self.collection.find({"chat_id": chat_id}).sort("timestamp", ASCENDING)
+        )
+        return self._calculate_summary(invoices)
+
+    def get_partial_invoices(self, chat_id: str) -> list[dict[str, Any]]:
+        """Get all invoices with partial payment status."""
+        return list(
+            self.collection.find(
+                {"chat_id": chat_id, "payment_status": "PARTIAL"}
+            ).sort("timestamp", DESCENDING)
+        )
+
+    def update_invoice_payment(
+        self, invoice_number: str, new_deposit: float
+    ) -> bool:
+        """Update deposit amount and recalculate payment status for an invoice."""
+        invoice = self.collection.find_one({"invoice_number": invoice_number})
+        if not invoice:
+            return False
+
+        grand_total = Decimal(str(invoice["grand_total"]))
+        new_deposit_decimal = Decimal(str(new_deposit))
+        balance_due = grand_total - new_deposit_decimal
+
+        # Determine payment status
+        if new_deposit_decimal >= grand_total:
+            payment_status = "PAID"
+            balance_due = Decimal("0")
+        elif new_deposit_decimal > 0:
+            payment_status = "PARTIAL"
+        else:
+            payment_status = "UNPAID"
+
+        result = self.collection.update_one(
+            {"invoice_number": invoice_number},
+            {
+                "$set": {
+                    "deposit_paid": float(new_deposit_decimal),
+                    "balance_due": float(balance_due),
+                    "payment_status": payment_status,
+                }
+            },
+        )
+
+        return result.modified_count > 0
 
     def close(self) -> None:
         """Close MongoDB connection."""
