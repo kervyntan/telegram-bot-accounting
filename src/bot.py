@@ -428,7 +428,7 @@ Reports will be sent automatically at 7 PM SGT."""
         if not update.message:
             return
 
-        chat_id = str(update.message.chat_id)
+        chat_id = update.message.chat_id
         summary = self.storage.get_all_invoices(chat_id)
 
         lines = [
@@ -481,7 +481,7 @@ Reports will be sent automatically at 7 PM SGT."""
         if not update.message:
             return
 
-        chat_id = str(update.message.chat_id)
+        chat_id = update.message.chat_id
         invoices = self.storage.get_partial_invoices(chat_id)
 
         lines = [

@@ -139,14 +139,14 @@ class MongoInvoiceStorage:
             "invoices": invoices,
         }
 
-    def get_all_invoices(self, chat_id: str) -> dict[str, Any]:
+    def get_all_invoices(self, chat_id: int) -> dict[str, Any]:
         """Get all-time summary for inception report."""
         invoices = list(
             self.invoices.find({"chat_id": chat_id}).sort("timestamp", ASCENDING)
         )
         return self._calculate_summary(invoices)
 
-    def get_partial_invoices(self, chat_id: str) -> list[dict[str, Any]]:
+    def get_partial_invoices(self, chat_id: int) -> list[dict[str, Any]]:
         """Get all invoices with partial payment status."""
         return list(
             self.invoices.find(
