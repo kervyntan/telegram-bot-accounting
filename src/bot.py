@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from datetime import datetime, time, timedelta
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from telegram import Update
@@ -16,6 +17,7 @@ from telegram.ext import (
 )
 
 from .config import Settings, load_settings
+from .models import CardPurchase
 from .parser import MessageParseError, MessageParser
 from .pdf_generator import InvoiceGenerator
 from .storage import InvoiceStorage
@@ -71,6 +73,8 @@ class InvoiceBot:
         self.app.add_handler(CommandHandler("inception", self.inception_report_command))
         self.app.add_handler(CommandHandler("partial", self.partial_invoices_command))
         self.app.add_handler(CommandHandler("payment", self.update_payment_command))
+        self.app.add_handler(CommandHandler("buycard", self.buycard_command))
+        self.app.add_handler(CommandHandler("cards", self.cards_command))
         self.app.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message)
         )
@@ -109,6 +113,8 @@ I can help you generate professional invoices from simple messages.
 /inception - Get all-time P/L summary
 /partial - Show all partial payment invoices
 /payment - Update payment on an invoice
+/buycard - Record a card purchase (inventory tracking)
+/cards - Show all card purchases and total investment
 
 📊 Automatic Reports:
 • Daily report sent at 7 PM SGT
@@ -558,6 +564,165 @@ Reports will be sent automatically at 7 PM SGT."""
                 "Please check the invoice number and try again.",
                 parse_mode=ParseMode.MARKDOWN,
             )
+
+    async def buycard_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Handle /buycard command - add a card purchase for inventory tracking."""
+        if not update.message or not context.args:
+            help_message = (
+                "🃏 *Card Purchase Tracking*\n\n"
+                "Track cards purchased for future sale (inventory/investment).\n\n"
+                "Usage: /buycard <card_name> | <price> | <quantity> | [notes]\n\n"
+                "Examples:\n"
+                "• /buycard Charizard VMAX | 150 | 2\n"
+                "• /buycard Pikachu Gold Star | 500.50 | 1 | PSA 10\n"
+                "• /buycard Pokemon Booster Box | 120 | 5 | Vivid Voltage\n\n"
+                "Notes are optional. Prices can include $ or not."
+            )
+            if update.message:
+                await update.message.reply_text(
+                    help_message, parse_mode=ParseMode.MARKDOWN
+                )
+            return
+
+        # Join all args and parse
+        full_text = " ".join(context.args)
+        parts = [p.strip() for p in full_text.split("|")]
+
+        if len(parts) < 3:
+            await update.message.reply_text(
+                "❌ Invalid format. Use: /buycard <card_name> | <price> | <quantity> | [notes]\n\n"
+                "Example: /buycard Charizard VMAX | 150 | 2",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            return
+
+        card_name = parts[0]
+        notes = parts[3] if len(parts) > 3 else None
+
+        try:
+            # Parse price (remove $ and commas)
+            price_str = parts[1].replace("$", "").replace(",", "").strip()
+            purchase_price = Decimal(price_str)
+
+            if purchase_price < 0:
+                await update.message.reply_text("❌ Price cannot be negative.")
+                return
+
+            # Parse quantity
+            quantity = int(parts[2])
+            if quantity < 1:
+                await update.message.reply_text("❌ Quantity must be at least 1.")
+                return
+
+        except (ValueError, IndexError) as e:
+            await update.message.reply_text(
+                f"❌ Error parsing price or quantity: {e}\n\n"
+                "Make sure price is a valid number and quantity is an integer."
+            )
+            return
+
+        # Create card purchase record
+        try:
+            card_data = CardPurchase.create(
+                card_name=card_name,
+                purchase_price=purchase_price,
+                quantity=quantity,
+                notes=notes,
+            )
+
+            # Save to storage
+            self.storage.add_card(card_data, update.message.chat_id)
+
+            # Format response
+            response_lines = [
+                "✅ *Card Purchase Recorded!*",
+                "",
+                f"🃏 Card: {card_data.card_name}",
+                f"🆔 ID: {card_data.card_id}",
+                f"💵 Price per card: ${card_data.purchase_price:.2f}",
+                f"📦 Quantity: {card_data.quantity}",
+                f"💰 Total Cost: ${card_data.total_cost:.2f}",
+                f"📅 Date: {card_data.purchase_date}",
+            ]
+
+            if card_data.notes:
+                response_lines.append(f"📝 Notes: {card_data.notes}")
+
+            await update.message.reply_text(
+                "\n".join(response_lines), parse_mode=ParseMode.MARKDOWN
+            )
+
+            logger.info(
+                f"Card purchase recorded for chat {update.message.chat_id}: "
+                f"{card_data.card_id} - {card_data.card_name}"
+            )
+
+        except Exception as e:
+            await update.message.reply_text(
+                f"❌ Error recording card purchase: {e}\n\nPlease try again."
+            )
+            logger.error(
+                f"Error recording card purchase in chat {update.message.chat_id}: {e}",
+                exc_info=True,
+            )
+
+    async def cards_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Handle /cards command - show all card purchases and total investment."""
+        if not update.message:
+            return
+
+        chat_id = update.message.chat_id
+        summary = self.storage.get_cards_summary(chat_id)
+
+        lines = [
+            "🃏 *Card Purchase Inventory*",
+            "",
+        ]
+
+        if summary["total_cards"] == 0:
+            lines.append("No card purchases recorded yet.")
+            lines.append("")
+            lines.append("Use /buycard to add card purchases for tracking.")
+        else:
+            lines.extend(
+                [
+                    "📊 *Summary:*",
+                    f"• Total Purchases: {summary['total_cards']}",
+                    f"• Total Cards: {summary['total_quantity']}",
+                    f"• Total Investment: ${summary['total_cost']:.2f}",
+                    "",
+                    "📋 *Recent Purchases:*",
+                    "",
+                ]
+            )
+
+            # Show recent purchases (limit to last 20)
+            for card in summary["cards"][:20]:
+                date_str = card["timestamp"].strftime("%Y-%m-%d")
+                lines.extend(
+                    [
+                        f"🔸 *{card['card_name']}*",
+                        f"  🆔 {card['card_id']}",
+                        f"  💵 ${card['purchase_price']:.2f} × "
+                        f"{card['quantity']} = ${card['total_cost']:.2f}",
+                        f"  📅 {date_str}",
+                    ]
+                )
+                if card.get("notes"):
+                    lines.append(f"  📝 {card['notes']}")
+                lines.append("")
+
+            if len(summary["cards"]) > 20:
+                lines.append(
+                    f"_...and {len(summary['cards']) - 20} more purchases_"
+                )
+
+        message = "\n".join(lines)
+        await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
 
     def run(self) -> None:
         """Run the bot."""

@@ -8,7 +8,7 @@ from pymongo import ASCENDING, DESCENDING, MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
 
-from .models import InvoiceData
+from .models import CardPurchase, InvoiceData
 
 
 class MongoInvoiceStorage:
@@ -19,11 +19,17 @@ class MongoInvoiceStorage:
         self.client = MongoClient(mongo_uri)
         self.db: Database = self.client[database_name]
         self.invoices: Collection = self.db["invoices"]
+        self.cards: Collection = self.db["cards"]
 
         # Create indexes for better query performance
         self.invoices.create_index("chat_id")
         self.invoices.create_index("timestamp")
         self.invoices.create_index([("chat_id", 1), ("timestamp", -1)])
+        
+        # Create indexes for cards
+        self.cards.create_index("chat_id")
+        self.cards.create_index("timestamp")
+        self.cards.create_index([("chat_id", 1), ("timestamp", -1)])
 
     def add_invoice(self, invoice_data: InvoiceData, chat_id: int) -> None:
         """Add an invoice record to MongoDB."""
@@ -187,6 +193,49 @@ class MongoInvoiceStorage:
         )
 
         return result.modified_count > 0
+
+    def add_card(self, card_data: CardPurchase, chat_id: int) -> None:
+        """Add a card purchase record to MongoDB."""
+        record = {
+            "card_id": card_data.card_id,
+            "card_name": card_data.card_name,
+            "purchase_price": float(card_data.purchase_price),
+            "quantity": card_data.quantity,
+            "total_cost": float(card_data.total_cost),
+            "purchase_date": card_data.purchase_date,
+            "timestamp": card_data.timestamp,
+            "chat_id": chat_id,
+            "notes": card_data.notes,
+        }
+
+        self.cards.insert_one(record)
+
+    def get_all_cards(self, chat_id: int) -> list[dict[str, Any]]:
+        """Get all card purchases for a specific chat."""
+        cursor = self.cards.find({"chat_id": chat_id}).sort("timestamp", DESCENDING)
+        return list(cursor)
+
+    def get_cards_summary(self, chat_id: int) -> dict[str, Any]:
+        """Get summary of all card purchases."""
+        cards = self.get_all_cards(chat_id)
+
+        if not cards:
+            return {
+                "total_cards": 0,
+                "total_quantity": 0,
+                "total_cost": 0.0,
+                "cards": [],
+            }
+
+        total_cost = sum(Decimal(str(card["total_cost"])) for card in cards)
+        total_quantity = sum(card["quantity"] for card in cards)
+
+        return {
+            "total_cards": len(cards),
+            "total_quantity": total_quantity,
+            "total_cost": float(total_cost),
+            "cards": cards,
+        }
 
     def close(self) -> None:
         """Close MongoDB connection."""

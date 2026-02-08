@@ -132,3 +132,60 @@ class InvoiceData(BaseModel):
         now = datetime.now()
         random_suffix = now.microsecond % 10000
         return f"INV-{now.strftime('%Y%m%d')}-{random_suffix:04d}"
+
+
+class CardPurchase(BaseModel):
+    """Model for a card purchase (inventory/investment tracking)."""
+
+    card_id: str = Field(..., description="Unique card purchase ID")
+    card_name: str = Field(..., min_length=1, max_length=300, description="Card name")
+    purchase_price: Decimal = Field(..., ge=0, description="Purchase price per card")
+    quantity: int = Field(..., ge=1, description="Quantity of cards purchased")
+    purchase_date: str = Field(..., description="Purchase date")
+    timestamp: datetime = Field(default_factory=datetime.now, description="Timestamp")
+    notes: str | None = Field(None, max_length=500, description="Optional notes")
+
+    @field_validator("purchase_price", mode="before")
+    @classmethod
+    def parse_decimal(cls, v: str | float | Decimal) -> Decimal:
+        """Parse decimal from various input types."""
+        if isinstance(v, str):
+            # Remove currency symbols and spaces
+            v = v.replace("$", "").replace(",", "").strip()
+        return Decimal(str(v))
+
+    @property
+    def total_cost(self) -> Decimal:
+        """Calculate total cost for this purchase."""
+        return self.purchase_price * self.quantity
+
+    @classmethod
+    def create(
+        cls,
+        card_name: str,
+        purchase_price: Decimal,
+        quantity: int,
+        notes: str | None = None,
+    ) -> "CardPurchase":
+        """Create a card purchase record."""
+        # Generate card purchase ID
+        card_id = cls.generate_card_id()
+
+        # Format date
+        date_str = datetime.now().strftime("%B %d, %Y")
+
+        return cls(
+            card_id=card_id,
+            card_name=card_name,
+            purchase_price=purchase_price.quantize(Decimal("0.01")),
+            quantity=quantity,
+            purchase_date=date_str,
+            notes=notes,
+        )
+
+    @staticmethod
+    def generate_card_id() -> str:
+        """Generate unique card purchase ID."""
+        now = datetime.now()
+        random_suffix = now.microsecond % 10000
+        return f"CARD-{now.strftime('%Y%m%d')}-{random_suffix:04d}"
