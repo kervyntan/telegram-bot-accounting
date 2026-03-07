@@ -77,6 +77,7 @@ class InvoiceBot:
         self.app.add_handler(CommandHandler("buycard", self.buycard_command))
         self.app.add_handler(CommandHandler("cards", self.cards_command))
         self.app.add_handler(CommandHandler("sellcard", self.sellcard_command))
+        self.app.add_handler(CommandHandler("customerorders", self.customerorders_command))
         self.app.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message)
         )
@@ -118,6 +119,7 @@ I can help you generate professional invoices from simple messages.
 /buycard - Record a card purchase (inventory tracking)
 /cards - Show all active card purchases
 /sellcard - Mark card as sold (remove from P/L)
+/customerorders - List all orders for a customer
 
 📊 Automatic Reports:
 • Daily report sent at 7 PM SGT
@@ -771,6 +773,75 @@ Reports will be sent automatically at 7 PM SGT."""
 
         message = "\n".join(lines)
         await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+
+    async def customerorders_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Handle /customerorders command - list all orders for a customer from inception."""
+        if not update.message:
+            return
+
+        if not context.args:
+            await update.message.reply_text(
+                "👤 *Customer Orders*\n\n"
+                "Usage: /customerorders <customer_name>\n\n"
+                "Examples:\n"
+                "• /customerorders John Tan\n"
+                "• /customerorders Alice",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            return
+
+        customer_name = " ".join(context.args)
+        chat_id = update.message.chat_id
+        invoices = self.storage.get_invoices_by_customer(chat_id, customer_name)
+
+        if not invoices:
+            await update.message.reply_text(
+                f"❌ No orders found for customer *{customer_name}*.",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            return
+
+        # Totals
+        total_revenue = sum(inv["grand_total"] for inv in invoices)
+        total_paid = sum(inv["deposit_paid"] for inv in invoices)
+        total_outstanding = sum(inv["balance_due"] for inv in invoices)
+
+        lines = [
+            f"👤 *Orders for {customer_name}*",
+            f"📋 Total Invoices: {len(invoices)}",
+            f"💵 Total Revenue: ${total_revenue:.2f}",
+            f"💸 Amount Paid: ${total_paid:.2f}",
+            f"📅 Outstanding: ${total_outstanding:.2f}",
+            "",
+        ]
+
+        for inv in invoices:
+            status_icon = {"PAID": "✅", "PARTIAL": "🔶", "UNPAID": "⏳"}.get(
+                inv.get("payment_status", "UNPAID"), "⏳"
+            )
+            lines.append(
+                f"🔸 *{inv['invoice_number']}* — {inv['date']} {status_icon}"
+            )
+            items = inv.get("items", [])
+            if items:
+                for item in items:
+                    lines.append(
+                        f"  • {item['name']} × {item['quantity']} "
+                        f"@ ${item['sale_price']:.2f} = ${item['amount']:.2f}"
+                    )
+            else:
+                lines.append(f"  📦 {inv['items_count']} item(s)")
+            lines.append(
+                f"  💰 Total: ${inv['grand_total']:.2f} "
+                f"| Paid: ${inv['deposit_paid']:.2f}"
+            )
+            lines.append("")
+
+        await update.message.reply_text(
+            "\n".join(lines), parse_mode=ParseMode.MARKDOWN
+        )
 
     async def sellcard_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE

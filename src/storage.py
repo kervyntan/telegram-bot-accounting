@@ -53,6 +53,16 @@ class InvoiceStorage:
             "total_cost": float(invoice_data.totals.total_cost),
             "total_profit": float(invoice_data.totals.total_profit),
             "items_count": len(invoice_data.items),
+            "items": [
+                {
+                    "name": item.name,
+                    "cost_price": float(item.cost_price),
+                    "sale_price": float(item.sale_price),
+                    "quantity": item.quantity,
+                    "amount": float(item.amount),
+                }
+                for item in invoice_data.items
+            ],
         }
 
         data.append(record)
@@ -153,6 +163,20 @@ class InvoiceStorage:
         data = self._load_data()
         invoices = [record for record in data if record["chat_id"] == chat_id]
         return self._calculate_summary(invoices)
+
+    def get_invoices_by_customer(
+        self, chat_id: int, customer_name: str
+    ) -> list[dict[str, Any]]:
+        """Get all invoices for a specific customer (case-insensitive)."""
+        data = self._load_data()
+        name_lower = customer_name.lower()
+        return [
+            record
+            for record in data
+            if record["chat_id"] == chat_id
+            and record.get("customer_name")
+            and record["customer_name"].lower() == name_lower
+        ]
 
     def get_partial_invoices(self, chat_id: int) -> list[dict[str, Any]]:
         """Get all invoices with partial payment status."""

@@ -1,5 +1,6 @@
 """MongoDB storage for invoice records."""
 
+import re
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -174,6 +175,18 @@ class MongoInvoiceStorage:
             self.cards.find({"chat_id": chat_id}).sort("timestamp", ASCENDING)
         )
         return self._calculate_summary(invoices, cards)
+
+    def get_invoices_by_customer(
+        self, chat_id: int, customer_name: str
+    ) -> list[dict[str, Any]]:
+        """Get all invoices for a specific customer (case-insensitive)."""
+        cursor = self.invoices.find(
+            {
+                "chat_id": chat_id,
+                "customer_name": {"$regex": f"^{re.escape(customer_name)}$", "$options": "i"},
+            }
+        ).sort("timestamp", ASCENDING)
+        return list(cursor)
 
     def get_partial_invoices(self, chat_id: int) -> list[dict[str, Any]]:
         """Get all invoices with partial payment status."""
