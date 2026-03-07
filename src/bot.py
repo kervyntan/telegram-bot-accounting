@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
@@ -75,6 +76,7 @@ class InvoiceBot:
         self.app.add_handler(CommandHandler("payment", self.update_payment_command))
         self.app.add_handler(CommandHandler("buycard", self.buycard_command))
         self.app.add_handler(CommandHandler("cards", self.cards_command))
+        self.app.add_handler(CommandHandler("sellcard", self.sellcard_command))
         self.app.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message)
         )
@@ -114,7 +116,8 @@ I can help you generate professional invoices from simple messages.
 /partial - Show all partial payment invoices
 /payment - Update payment on an invoice
 /buycard - Record a card purchase (inventory tracking)
-/cards - Show all card purchases and total investment
+/cards - Show all active card purchases
+/sellcard - Mark card as sold (remove from P/L)
 
 📊 Automatic Reports:
 • Daily report sent at 7 PM SGT
@@ -176,11 +179,19 @@ Reports will be sent automatically at 7 PM SGT."""
             # Prepare caption
             caption = self._format_invoice_caption(invoice_data)
 
+            # Build optional client name suffix for Telegram filename
+            _client_name_part = ""
+            if invoice_data.customer_name:
+                _safe = re.sub(r"[^\w\s-]", "", invoice_data.customer_name).strip()
+                _safe = re.sub(r"[\s]+", "_", _safe)
+                if _safe:
+                    _client_name_part = f"_{_safe}"
+
             # Send client PDF
             with open(client_pdf_path, "rb") as pdf_file:
                 await update.message.reply_document(
                     document=pdf_file,
-                    filename=f"invoice_{invoice_data.invoice_number}_client.pdf",
+                    filename=f"invoice_{invoice_data.invoice_number}{_client_name_part}_client.pdf",
                     caption=caption + "\n\n📄 Client Invoice (for customer)",
                 )
 
@@ -188,7 +199,7 @@ Reports will be sent automatically at 7 PM SGT."""
             with open(internal_pdf_path, "rb") as pdf_file:
                 await update.message.reply_document(
                     document=pdf_file,
-                    filename=f"invoice_{invoice_data.invoice_number}_internal.pdf",
+                    filename=f"invoice_{invoice_data.invoice_number}{_client_name_part}_internal.pdf",
                     caption="📊 Internal Invoice (with cost & profit details)",
                 )
 
@@ -406,6 +417,18 @@ Reports will be sent automatically at 7 PM SGT."""
                     "",
                 ]
             )
+            # Add card purchases info
+            if summary.get("card_purchases", 0) > 0:
+                lines.extend(
+                    [
+                        f"🎴 Active Card Purchases: {summary['card_purchases']}",
+                        f"💳 Card Investment Cost: ${summary['card_cost']:.2f}",
+                        "",
+                    ]
+                )
+            # Add net profit
+            lines.append(f"💎 Net Profit (after cards): ${summary['net_profit']:.2f}")
+            lines.append("")
             # Add payment status breakdown
             if summary["paid_count"] > 0 or summary["partial_count"] > 0:
                 lines.append("📄 *Payment Status:*")
@@ -418,8 +441,11 @@ Reports will be sent automatically at 7 PM SGT."""
                 lines.append("")
             # Add profit margin and average
             if summary["total_revenue"] > 0:
-                margin = summary["total_profit"] / summary["total_revenue"] * 100
-                lines.append(f"📊 Profit Margin: {margin:.1f}%")
+                invoice_margin = summary["total_profit"] / summary["total_revenue"] * 100
+                lines.append(f"📊 Invoice Profit Margin: {invoice_margin:.1f}%")
+                if summary["net_profit"] != summary["total_profit"]:
+                    net_margin = summary["net_profit"] / summary["total_revenue"] * 100
+                    lines.append(f"📊 Net Profit Margin: {net_margin:.1f}%")
                 avg = summary["total_revenue"] / summary["total_invoices"]
                 lines.append(f"📊 Average Invoice Value: ${avg:.2f}")
             else:
@@ -460,6 +486,18 @@ Reports will be sent automatically at 7 PM SGT."""
                     "",
                 ]
             )
+            # Add card purchases info
+            if summary.get("card_purchases", 0) > 0:
+                lines.extend(
+                    [
+                        f"🎴 Active Card Purchases: {summary['card_purchases']}",
+                        f"💳 Card Investment Cost: ${summary['card_cost']:.2f}",
+                        "",
+                    ]
+                )
+            # Add net profit
+            lines.append(f"💎 Net Profit (after cards): ${summary['net_profit']:.2f}")
+            lines.append("")
             # Add payment status breakdown
             if summary["paid_count"] > 0 or summary["partial_count"] > 0:
                 lines.append("📄 *Payment Status:*")
@@ -472,8 +510,11 @@ Reports will be sent automatically at 7 PM SGT."""
                 lines.append("")
             # Add profit margin and average
             if summary["total_revenue"] > 0:
-                margin = summary["total_profit"] / summary["total_revenue"] * 100
-                lines.append(f"📊 Profit Margin: {margin:.1f}%")
+                invoice_margin = summary["total_profit"] / summary["total_revenue"] * 100
+                lines.append(f"📊 Invoice Profit Margin: {invoice_margin:.1f}%")
+                if summary.get("net_profit", summary["total_profit"]) != summary["total_profit"]:
+                    net_margin = summary["net_profit"] / summary["total_revenue"] * 100
+                    lines.append(f"📊 Net Profit Margin: {net_margin:.1f}%")
                 avg = summary["total_revenue"] / summary["total_invoices"]
                 lines.append(f"📊 Average Invoice Value: ${avg:.2f}")
 
@@ -671,37 +712,41 @@ Reports will be sent automatically at 7 PM SGT."""
     async def cards_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        """Handle /cards command - show all card purchases and total investment."""
+        """Handle /cards command - show active card purchases."""
         if not update.message:
             return
 
         chat_id = update.message.chat_id
-        summary = self.storage.get_cards_summary(chat_id)
+        cards = self.storage.get_active_cards(chat_id)
 
         lines = [
-            "🃏 *Card Purchase Inventory*",
+            "🃏 *Active Card Inventory*",
             "",
         ]
 
-        if summary["total_cards"] == 0:
-            lines.append("No card purchases recorded yet.")
+        if not cards:
+            lines.append("No active card purchases.")
             lines.append("")
             lines.append("Use /buycard to add card purchases for tracking.")
         else:
+            # Calculate totals
+            total_cost = sum(card["total_cost"] for card in cards)
+            total_quantity = sum(card["quantity"] for card in cards)
+
             lines.extend(
                 [
                     "📊 *Summary:*",
-                    f"• Total Purchases: {summary['total_cards']}",
-                    f"• Total Cards: {summary['total_quantity']}",
-                    f"• Total Investment: ${summary['total_cost']:.2f}",
+                    f"• Total Active Purchases: {len(cards)}",
+                    f"• Total Cards: {total_quantity}",
+                    f"• Total Investment: ${total_cost:.2f}",
                     "",
-                    "📋 *Recent Purchases:*",
+                    "📋 *Active Purchases:*",
                     "",
                 ]
             )
 
             # Show recent purchases (limit to last 20)
-            for card in summary["cards"][:20]:
+            for card in cards[:20]:
                 date_str = card["timestamp"].strftime("%Y-%m-%d")
                 lines.extend(
                     [
@@ -716,13 +761,65 @@ Reports will be sent automatically at 7 PM SGT."""
                     lines.append(f"  📝 {card['notes']}")
                 lines.append("")
 
-            if len(summary["cards"]) > 20:
+            if len(cards) > 20:
                 lines.append(
-                    f"_...and {len(summary['cards']) - 20} more purchases_"
+                    f"_...and {len(cards) - 20} more purchases_"
                 )
+            
+            lines.append("")
+            lines.append("💡 Use /sellcard <card_id> to mark a card as sold")
 
         message = "\n".join(lines)
         await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+
+    async def sellcard_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Handle /sellcard command - mark a card as sold."""
+        if not update.message or not context.args:
+            help_message = (
+                "🔄 *Mark Card as Sold*\n\n"
+                "Remove a card from your active inventory (exclude from P/L calculations).\n\n"
+                "Usage: /sellcard <card_id>\n\n"
+                "Example: /sellcard CARD-20260208-1234\n\n"
+                "💡 Use /cards to see all active card IDs"
+            )
+            if update.message:
+                await update.message.reply_text(
+                    help_message, parse_mode=ParseMode.MARKDOWN
+                )
+            return
+
+        card_id = context.args[0]
+
+        try:
+            success = self.storage.mark_card_as_sold(card_id)
+
+            if success:
+                await update.message.reply_text(
+                    f"✅ Card *{card_id}* marked as sold!\n\n"
+                    "It will no longer be included in P/L calculations.",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                logger.info(
+                    f"Card marked as sold in chat {update.message.chat_id}: {card_id}"
+                )
+            else:
+                await update.message.reply_text(
+                    f"❌ Card *{card_id}* not found.\n\n"
+                    "Please check the card ID and try again.\n"
+                    "Use /cards to see all active card IDs.",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+
+        except Exception as e:
+            await update.message.reply_text(
+                f"❌ Error marking card as sold: {e}\n\nPlease try again."
+            )
+            logger.error(
+                f"Error marking card as sold in chat {update.message.chat_id}: {e}",
+                exc_info=True,
+            )
 
     def run(self) -> None:
         """Run the bot."""

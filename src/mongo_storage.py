@@ -87,8 +87,9 @@ class MongoInvoiceStorage:
         end_of_day = start_of_day + timedelta(days=1)
 
         invoices = self.get_invoices_by_date_range(chat_id, start_of_day, end_of_day)
+        cards = self.get_cards_by_date_range(chat_id, start_of_day, end_of_day)
 
-        return self._calculate_summary(invoices)
+        return self._calculate_summary(invoices, cards)
 
     def get_weekly_summary(self, chat_id: int, end_date: datetime) -> dict[str, Any]:
         """Get summary for the past week (Friday 7pm to Friday 7pm)."""
@@ -96,12 +97,18 @@ class MongoInvoiceStorage:
         start_date = end_date - timedelta(days=7)
 
         invoices = self.get_invoices_by_date_range(chat_id, start_date, end_date)
+        cards = self.get_cards_by_date_range(chat_id, start_date, end_date)
 
-        return self._calculate_summary(invoices)
+        return self._calculate_summary(invoices, cards)
 
-    def _calculate_summary(self, invoices: list[dict[str, Any]]) -> dict[str, Any]:
-        """Calculate summary statistics from invoice records."""
-        if not invoices:
+    def _calculate_summary(
+        self, invoices: list[dict[str, Any]], cards: list[dict[str, Any]] = None
+    ) -> dict[str, Any]:
+        """Calculate summary statistics from invoice records and card purchases."""
+        if cards is None:
+            cards = []
+
+        if not invoices and not cards:
             return {
                 "total_invoices": 0,
                 "total_revenue": 0.0,
@@ -113,6 +120,9 @@ class MongoInvoiceStorage:
                 "paid_count": 0,
                 "partial_count": 0,
                 "unpaid_count": 0,
+                "card_purchases": 0,
+                "card_cost": 0.0,
+                "net_profit": 0.0,
             }
 
         total_revenue = sum(Decimal(str(inv["grand_total"])) for inv in invoices)
@@ -131,6 +141,13 @@ class MongoInvoiceStorage:
             1 for inv in invoices if inv.get("payment_status") == "UNPAID"
         )
 
+        # Calculate card costs (only active/unsold cards)
+        active_cards = [c for c in cards if c.get("status") == "active"]
+        card_cost = sum(Decimal(str(card["total_cost"])) for card in active_cards)
+        
+        # Calculate net profit (invoice profit - card investment costs)
+        net_profit = total_profit - card_cost
+
         return {
             "total_invoices": len(invoices),
             "total_revenue": float(total_revenue),
@@ -142,6 +159,9 @@ class MongoInvoiceStorage:
             "paid_count": paid_count,
             "partial_count": partial_count,
             "unpaid_count": unpaid_count,
+            "card_purchases": len(active_cards),
+            "card_cost": float(card_cost),
+            "net_profit": float(net_profit),
             "invoices": invoices,
         }
 
@@ -150,7 +170,10 @@ class MongoInvoiceStorage:
         invoices = list(
             self.invoices.find({"chat_id": chat_id}).sort("timestamp", ASCENDING)
         )
-        return self._calculate_summary(invoices)
+        cards = list(
+            self.cards.find({"chat_id": chat_id}).sort("timestamp", ASCENDING)
+        )
+        return self._calculate_summary(invoices, cards)
 
     def get_partial_invoices(self, chat_id: int) -> list[dict[str, Any]]:
         """Get all invoices with partial payment status."""
@@ -206,9 +229,28 @@ class MongoInvoiceStorage:
             "timestamp": card_data.timestamp,
             "chat_id": chat_id,
             "notes": card_data.notes,
+            "status": card_data.status,
         }
 
         self.cards.insert_one(record)
+
+    def get_cards_by_date_range(
+        self, chat_id: int, start_date: datetime, end_date: datetime
+    ) -> list[dict[str, Any]]:
+        """Get card purchases within a date range for a specific chat."""
+        # Remove timezone info for comparison if present
+        if start_date.tzinfo is not None:
+            start_date = start_date.replace(tzinfo=None)
+        if end_date.tzinfo is not None:
+            end_date = end_date.replace(tzinfo=None)
+
+        query = {
+            "chat_id": chat_id,
+            "timestamp": {"$gte": start_date, "$lt": end_date},
+        }
+
+        cursor = self.cards.find(query).sort("timestamp", -1)
+        return list(cursor)
 
     def get_all_cards(self, chat_id: int) -> list[dict[str, Any]]:
         """Get all card purchases for a specific chat."""
@@ -236,6 +278,22 @@ class MongoInvoiceStorage:
             "total_cost": float(total_cost),
             "cards": cards,
         }
+
+    def mark_card_as_sold(self, card_id: str) -> bool:
+        """Mark a card purchase as sold."""
+        result = self.cards.update_one(
+            {"card_id": card_id},
+            {"$set": {"status": "sold"}},
+        )
+        return result.modified_count > 0
+
+    def get_active_cards(self, chat_id: int) -> list[dict[str, Any]]:
+        """Get all active (unsold) card purchases."""
+        return list(
+            self.cards.find(
+                {"chat_id": chat_id, "status": "active"}
+            ).sort("timestamp", DESCENDING)
+        )
 
     def close(self) -> None:
         """Close MongoDB connection."""

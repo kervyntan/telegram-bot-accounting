@@ -144,6 +144,9 @@ class CardPurchase(BaseModel):
     purchase_date: str = Field(..., description="Purchase date")
     timestamp: datetime = Field(default_factory=datetime.now, description="Timestamp")
     notes: str | None = Field(None, max_length=500, description="Optional notes")
+    status: str = Field(
+        default="active", description="Status: 'active' or 'sold'"
+    )
 
     @field_validator("purchase_price", mode="before")
     @classmethod

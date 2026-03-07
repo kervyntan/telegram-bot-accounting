@@ -1,5 +1,6 @@
 """PDF invoice generator using ReportLab."""
 
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -33,16 +34,24 @@ class InvoiceGenerator:
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+        # Sanitize client name for use in filename
+        client_name_part = ""
+        if invoice_data.customer_name:
+            safe_name = re.sub(r"[^\w\s-]", "", invoice_data.customer_name).strip()
+            safe_name = re.sub(r"[\s]+", "_", safe_name)
+            if safe_name:
+                client_name_part = f"_{safe_name}"
+
         # Generate client invoice (without cost price)
         client_filename = (
-            f"invoice_{invoice_data.invoice_number}_{timestamp}_client.pdf"
+            f"invoice_{invoice_data.invoice_number}{client_name_part}_{timestamp}_client.pdf"
         )
         client_filepath = self.settings.invoices_dir / client_filename
         self._generate_single_pdf(client_filepath, invoice_data, is_client=True)
 
         # Generate internal invoice (with cost price and profit)
         internal_filename = (
-            f"invoice_{invoice_data.invoice_number}_{timestamp}_internal.pdf"
+            f"invoice_{invoice_data.invoice_number}{client_name_part}_{timestamp}_internal.pdf"
         )
         internal_filepath = self.settings.invoices_dir / internal_filename
         self._generate_single_pdf(internal_filepath, invoice_data, is_client=False)
