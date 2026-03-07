@@ -169,13 +169,15 @@ class InvoiceStorage:
     ) -> list[dict[str, Any]]:
         """Get all invoices for a specific customer (case-insensitive)."""
         data = self._load_data()
-        name_lower = customer_name.lower()
+        # Normalize to a single lowercase space-separated string so differences
+        # in whitespace type (e.g. non-breaking space) or count don't break lookup
+        normalized_query = " ".join(customer_name.split()).lower()
         return [
             record
             for record in data
             if record["chat_id"] == chat_id
             and record.get("customer_name")
-            and record["customer_name"].lower() == name_lower
+            and " ".join(record["customer_name"].split()).lower() == normalized_query
         ]
 
     def get_partial_invoices(self, chat_id: int) -> list[dict[str, Any]]:

@@ -180,10 +180,16 @@ class MongoInvoiceStorage:
         self, chat_id: int, customer_name: str
     ) -> list[dict[str, Any]]:
         """Get all invoices for a specific customer (case-insensitive)."""
+        # Normalize whitespace before building the regex so stored names with
+        # non-breaking spaces or extra whitespace still match
+        normalized = " ".join(customer_name.split())
+        # Escape regex metacharacters but NOT spaces (avoid re.escape which
+        # escapes spaces and produces patterns MongoDB may not handle)
+        pattern = re.sub(r"([.^$*+?{}\[\]\\|()])", r"\\\1", normalized)
         cursor = self.invoices.find(
             {
                 "chat_id": chat_id,
-                "customer_name": {"$regex": f"^{re.escape(customer_name)}$", "$options": "i"},
+                "customer_name": {"$regex": f"^{pattern}$", "$options": "i"},
             }
         ).sort("timestamp", ASCENDING)
         return list(cursor)
