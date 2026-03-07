@@ -1,6 +1,7 @@
 """Telegram bot for invoice generation."""
 
 import asyncio
+import io
 import logging
 import re
 from datetime import datetime, time, timedelta
@@ -809,38 +810,55 @@ Reports will be sent automatically at 7 PM SGT."""
         total_outstanding = sum(inv["balance_due"] for inv in invoices)
 
         lines = [
-            f"👤 *Orders for {customer_name}*",
-            f"📋 Total Invoices: {len(invoices)}",
-            f"💵 Total Revenue: ${total_revenue:.2f}",
-            f"💸 Amount Paid: ${total_paid:.2f}",
-            f"📅 Outstanding: ${total_outstanding:.2f}",
+            f"Customer Orders: {customer_name}",
+            f"Generated: {datetime.now(SGT).strftime('%Y-%m-%d %H:%M')} SGT",
+            "=" * 50,
+            f"Total Invoices : {len(invoices)}",
+            f"Total Revenue  : ${total_revenue:.2f}",
+            f"Amount Paid    : ${total_paid:.2f}",
+            f"Outstanding    : ${total_outstanding:.2f}",
+            "=" * 50,
             "",
         ]
 
         for inv in invoices:
-            status_icon = {"PAID": "✅", "PARTIAL": "🔶", "UNPAID": "⏳"}.get(
-                inv.get("payment_status", "UNPAID"), "⏳"
-            )
-            lines.append(
-                f"🔸 *{inv['invoice_number']}* — {inv['date']} {status_icon}"
-            )
+            status = inv.get("payment_status", "UNPAID")
+            lines.append(f"Invoice : {inv['invoice_number']}")
+            lines.append(f"Date    : {inv['date']}")
+            lines.append(f"Status  : {status}")
             items = inv.get("items", [])
             if items:
+                lines.append("Items   :")
                 for item in items:
                     lines.append(
-                        f"  • {item['name']} × {item['quantity']} "
+                        f"  - {item['name']} x{item['quantity']} "
                         f"@ ${item['sale_price']:.2f} = ${item['amount']:.2f}"
                     )
             else:
-                lines.append(f"  📦 {inv['items_count']} item(s)")
+                lines.append(f"Items   : {inv['items_count']} item(s)")
             lines.append(
-                f"  💰 Total: ${inv['grand_total']:.2f} "
-                f"| Paid: ${inv['deposit_paid']:.2f}"
+                f"Total   : ${inv['grand_total']:.2f}"
+                f"  |  Paid: ${inv['deposit_paid']:.2f}"
+                f"  |  Balance: ${inv['balance_due']:.2f}"
             )
+            lines.append("-" * 50)
             lines.append("")
 
-        await update.message.reply_text(
-            "\n".join(lines), parse_mode=ParseMode.MARKDOWN
+        file_content = "\n".join(lines).encode("utf-8")
+        safe_name = re.sub(r"[^\w\s-]", "", customer_name).strip()
+        safe_name = re.sub(r"[\s]+", "_", safe_name)
+        filename = f"orders_{safe_name}.txt"
+
+        await update.message.reply_document(
+            document=io.BytesIO(file_content),
+            filename=filename,
+            caption=(
+                f"📋 *{customer_name}* — {len(invoices)} invoice(s)\n"
+                f"💵 Revenue: ${total_revenue:.2f} | "
+                f"💸 Paid: ${total_paid:.2f} | "
+                f"📅 Outstanding: ${total_outstanding:.2f}"
+            ),
+            parse_mode=ParseMode.MARKDOWN,
         )
 
     async def sellcard_command(
