@@ -4,6 +4,7 @@ import asyncio
 import io
 import logging
 import re
+from collections import Counter
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
@@ -844,21 +845,37 @@ Reports will be sent automatically at 7 PM SGT."""
             lines.append("-" * 50)
             lines.append("")
 
-        file_content = "\n".join(lines).encode("utf-8")
+        # --- File 1: full detail ---
+        full_content = "\n".join(lines).encode("utf-8")
+
+        # --- File 2: items-only list ---
+        # Aggregate item quantities across all invoices
+        item_totals: Counter = Counter()
+        for inv in invoices:
+            for item in inv.get("items", []):
+                item_totals[item["name"]] += item["quantity"]
+        items_lines = [f"{name} x{qty}" for name, qty in sorted(item_totals.items())]
+        items_content = "\n".join(items_lines).encode("utf-8")
+
         safe_name = re.sub(r"[^\w\s-]", "", customer_name).strip()
         safe_name = re.sub(r"[\s]+", "_", safe_name)
-        filename = f"orders_{safe_name}.txt"
+
+        caption = (
+            f"📋 *{customer_name}* — {len(invoices)} invoice(s)\n"
+            f"💵 Revenue: ${total_revenue:.2f} | "
+            f"💸 Paid: ${total_paid:.2f} | "
+            f"📅 Outstanding: ${total_outstanding:.2f}"
+        )
 
         await update.message.reply_document(
-            document=io.BytesIO(file_content),
-            filename=filename,
-            caption=(
-                f"📋 *{customer_name}* — {len(invoices)} invoice(s)\n"
-                f"💵 Revenue: ${total_revenue:.2f} | "
-                f"💸 Paid: ${total_paid:.2f} | "
-                f"📅 Outstanding: ${total_outstanding:.2f}"
-            ),
+            document=io.BytesIO(full_content),
+            filename=f"orders_{safe_name}.txt",
+            caption=caption,
             parse_mode=ParseMode.MARKDOWN,
+        )
+        await update.message.reply_document(
+            document=io.BytesIO(items_content),
+            filename=f"orders_{safe_name}_items.txt",
         )
 
     async def sellcard_command(
