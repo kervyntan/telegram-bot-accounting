@@ -2,7 +2,7 @@
 
 import logging
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -117,9 +117,22 @@ class CatalogueBot:
             seller = r.get("sender_name", "unknown")
             lines.append(f"• {snippet}\n  — listed by {seller}")
 
+        # Build DM CTA button if owner username is configured
+        keyboard = None
+        if self.settings.owner_username:
+            keyboard = InlineKeyboardMarkup(
+                [[
+                    InlineKeyboardButton(
+                        "💬 DM Seller",
+                        url=f"https://t.me/{self.settings.owner_username}",
+                    )
+                ]]
+            )
+
         await update.message.reply_text(
             "\n\n".join(lines),
             parse_mode="Markdown",
+            reply_markup=keyboard,
         )
 
     async def _notify_owner(

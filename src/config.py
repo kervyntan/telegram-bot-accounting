@@ -85,6 +85,7 @@ class CatalogueSettings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        populate_by_name=True,
     )
 
     # Catalogue bot token (separate from accounting bot)
@@ -96,8 +97,15 @@ class CatalogueSettings(BaseSettings):
         default=None, description="Owner's chat ID for silent search notifications"
     )
     # Comma-separated list of group/channel chat IDs to index
+    # Env var: CATALOGUE_GROUP_IDS (alias avoids _raw suffix mismatch)
     catalogue_group_ids_raw: str = Field(
-        default="", description="Comma-separated group chat IDs to index for listings"
+        default="",
+        alias="catalogue_group_ids",
+        description="Comma-separated group chat IDs to index for listings",
+    )
+    # Owner's Telegram username (without @) — used for the DM CTA button in search results
+    owner_username: str | None = Field(
+        default=None, description="Owner's Telegram username (without @) for DM link"
     )
     # Webhook URL for the catalogue bot endpoint
     catalogue_webhook_url: str | None = Field(
