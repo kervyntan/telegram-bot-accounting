@@ -67,23 +67,30 @@ class InvoiceBot:
         # Build application
         self.app = Application.builder().token(settings.telegram_bot_token).build()
 
+        # Restrict all handlers to the owner's chat only (if TELEGRAM_CHAT_ID is set)
+        owner_filter = (
+            filters.Chat(chat_id=settings.telegram_chat_id)
+            if settings.telegram_chat_id
+            else filters.ALL
+        )
+
         # Register handlers
-        self.app.add_handler(CommandHandler("start", self.start_command))
-        self.app.add_handler(CommandHandler("help", self.help_command))
-        self.app.add_handler(CommandHandler("chatid", self.chatid_command))
-        self.app.add_handler(CommandHandler("daily", self.daily_report_command))
-        self.app.add_handler(CommandHandler("weekly", self.weekly_report_command))
-        self.app.add_handler(CommandHandler("inception", self.inception_report_command))
-        self.app.add_handler(CommandHandler("partial", self.partial_invoices_command))
-        self.app.add_handler(CommandHandler("payment", self.update_payment_command))
-        self.app.add_handler(CommandHandler("buycard", self.buycard_command))
-        self.app.add_handler(CommandHandler("cards", self.cards_command))
-        self.app.add_handler(CommandHandler("sellcard", self.sellcard_command))
+        self.app.add_handler(CommandHandler("start", self.start_command, filters=owner_filter))
+        self.app.add_handler(CommandHandler("help", self.help_command, filters=owner_filter))
+        self.app.add_handler(CommandHandler("chatid", self.chatid_command, filters=owner_filter))
+        self.app.add_handler(CommandHandler("daily", self.daily_report_command, filters=owner_filter))
+        self.app.add_handler(CommandHandler("weekly", self.weekly_report_command, filters=owner_filter))
+        self.app.add_handler(CommandHandler("inception", self.inception_report_command, filters=owner_filter))
+        self.app.add_handler(CommandHandler("partial", self.partial_invoices_command, filters=owner_filter))
+        self.app.add_handler(CommandHandler("payment", self.update_payment_command, filters=owner_filter))
+        self.app.add_handler(CommandHandler("buycard", self.buycard_command, filters=owner_filter))
+        self.app.add_handler(CommandHandler("cards", self.cards_command, filters=owner_filter))
+        self.app.add_handler(CommandHandler("sellcard", self.sellcard_command, filters=owner_filter))
         self.app.add_handler(
-            CommandHandler("customerorders", self.customerorders_command)
+            CommandHandler("customerorders", self.customerorders_command, filters=owner_filter)
         )
         self.app.add_handler(
-            MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message)
+            MessageHandler(filters.TEXT & ~filters.COMMAND & owner_filter, self.handle_message)
         )
 
         # Schedule daily and weekly reports

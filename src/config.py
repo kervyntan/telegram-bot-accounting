@@ -75,3 +75,54 @@ class Settings(BaseSettings):
 def load_settings() -> Settings:
     """Load and return application settings."""
     return Settings()
+
+
+class CatalogueSettings(BaseSettings):
+    """Settings for the public catalogue search bot."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    # Catalogue bot token (separate from accounting bot)
+    catalogue_bot_token: str = Field(
+        ..., description="Telegram bot token for the public catalogue search bot"
+    )
+    # Owner's chat ID — receives silent search notifications
+    owner_chat_id: int | None = Field(
+        default=None, description="Owner's chat ID for silent search notifications"
+    )
+    # Comma-separated list of group/channel chat IDs to index
+    catalogue_group_ids_raw: str = Field(
+        default="", description="Comma-separated group chat IDs to index for listings"
+    )
+    # Webhook URL for the catalogue bot endpoint
+    catalogue_webhook_url: str | None = Field(
+        default=None,
+        description="Public URL for catalogue bot webhook (e.g. https://your-app.vercel.app/api/catalogue_webhook)",
+    )
+
+    # Shared MongoDB (same cluster as accounting bot)
+    mongodb_uri: str | None = Field(default=None, description="MongoDB connection URI")
+    mongodb_database: str = Field(
+        default="telegram_bot", description="MongoDB database name"
+    )
+
+    @property
+    def catalogue_group_ids(self) -> list[int]:
+        """Parse comma-separated group IDs into a list of ints."""
+        if not self.catalogue_group_ids_raw:
+            return []
+        return [
+            int(x.strip())
+            for x in self.catalogue_group_ids_raw.split(",")
+            if x.strip()
+        ]
+
+
+def load_catalogue_settings() -> CatalogueSettings:
+    """Load and return catalogue bot settings."""
+    return CatalogueSettings()

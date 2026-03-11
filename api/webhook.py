@@ -1,5 +1,6 @@
 """Vercel serverless function — Telegram webhook for the invoice bot."""
 
+import asyncio
 import json
 import logging
 import sys
@@ -9,26 +10,21 @@ from pathlib import Path
 # Ensure `src` package is importable on Vercel
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from telegram import Update  # noqa: E402
+
 from src.bot import InvoiceBot  # noqa: E402
 from src.config import load_settings  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-# Module-level singleton — reused across warm invocations.
-_bot: InvoiceBot | None = None
-_initialized = False
 
-
-async def _get_bot() -> InvoiceBot:
-    """Lazy-init the bot singleton and register the webhook once."""
-    global _bot, _initialized
-    if _bot is None:
-        settings = load_settings()
-        _bot = InvoiceBot(settings)
-    if not _initialized:
-        await _bot.setup_webhook()
-        _initialized = True
-    return _bot
+async def _handle_update(payload: dict) -> None:
+    """Process a single Telegram update using a fresh Application lifecycle."""
+    settings = load_settings()
+    invoice_bot = InvoiceBot(settings)
+    async with invoice_bot.app:
+        update = Update.de_json(payload, invoice_bot.app.bot)
+        await invoice_bot.app.process_update(update)
 
 
 class handler(BaseHTTPRequestHandler):
@@ -44,28 +40,13 @@ class handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        import asyncio
-
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_closed():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        try:
-            loop.run_until_complete(self._process(payload))
+            asyncio.run(_handle_update(payload))
         except Exception:
             logger.exception("Error processing update")
 
         self.send_response(200)
         self.end_headers()
-
-    async def _process(self, payload: dict) -> None:
-        bot = await _get_bot()
-        await bot.process_update(payload)
 
     def do_GET(self):
         """Health check endpoint."""
