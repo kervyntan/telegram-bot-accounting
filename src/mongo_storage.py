@@ -26,7 +26,7 @@ class MongoInvoiceStorage:
         self.invoices.create_index("chat_id")
         self.invoices.create_index("timestamp")
         self.invoices.create_index([("chat_id", 1), ("timestamp", -1)])
-        
+
         # Create indexes for cards
         self.cards.create_index("chat_id")
         self.cards.create_index("timestamp")
@@ -145,7 +145,7 @@ class MongoInvoiceStorage:
         # Calculate card costs (only active/unsold cards)
         active_cards = [c for c in cards if c.get("status") == "active"]
         card_cost = sum(Decimal(str(card["total_cost"])) for card in active_cards)
-        
+
         # Calculate net profit (invoice profit - card investment costs)
         net_profit = total_profit - card_cost
 
@@ -171,9 +171,7 @@ class MongoInvoiceStorage:
         invoices = list(
             self.invoices.find({"chat_id": chat_id}).sort("timestamp", ASCENDING)
         )
-        cards = list(
-            self.cards.find({"chat_id": chat_id}).sort("timestamp", ASCENDING)
-        )
+        cards = list(self.cards.find({"chat_id": chat_id}).sort("timestamp", ASCENDING))
         return self._calculate_summary(invoices, cards)
 
     def get_invoices_by_customer(
@@ -197,14 +195,12 @@ class MongoInvoiceStorage:
     def get_partial_invoices(self, chat_id: int) -> list[dict[str, Any]]:
         """Get all invoices with partial payment status."""
         return list(
-            self.invoices.find(
-                {"chat_id": chat_id, "payment_status": "PARTIAL"}
-            ).sort("timestamp", DESCENDING)
+            self.invoices.find({"chat_id": chat_id, "payment_status": "PARTIAL"}).sort(
+                "timestamp", DESCENDING
+            )
         )
 
-    def update_invoice_payment(
-        self, invoice_number: str, new_deposit: float
-    ) -> bool:
+    def update_invoice_payment(self, invoice_number: str, new_deposit: float) -> bool:
         """Update deposit amount and recalculate payment status for an invoice."""
         invoice = self.invoices.find_one({"invoice_number": invoice_number})
         if not invoice:
@@ -309,9 +305,9 @@ class MongoInvoiceStorage:
     def get_active_cards(self, chat_id: int) -> list[dict[str, Any]]:
         """Get all active (unsold) card purchases."""
         return list(
-            self.cards.find(
-                {"chat_id": chat_id, "status": "active"}
-            ).sort("timestamp", DESCENDING)
+            self.cards.find({"chat_id": chat_id, "status": "active"}).sort(
+                "timestamp", DESCENDING
+            )
         )
 
     def close(self) -> None:

@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     telegram_chat_id: int | None = Field(
         default=None, description="Your Telegram chat ID for automated reports"
     )
+    webhook_url: str | None = Field(
+        default=None,
+        description="Public URL for Telegram webhook (e.g. https://your-app.vercel.app/api/webhook)",
+    )
 
     # MongoDB Configuration
     mongodb_uri: str | None = Field(default=None, description="MongoDB connection URI")
@@ -54,8 +58,16 @@ class Settings(BaseSettings):
 
     @property
     def invoices_dir(self) -> Path:
-        """Get invoices directory path."""
-        path = Path(__file__).parent.parent / "invoices"
+        """Get invoices directory path.
+
+        Uses /tmp on serverless platforms (read-only filesystem).
+        """
+        import os
+
+        if os.environ.get("VERCEL"):
+            path = Path("/tmp/invoices")
+        else:
+            path = Path(__file__).parent.parent / "invoices"
         path.mkdir(exist_ok=True)
         return path
 

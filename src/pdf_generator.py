@@ -43,16 +43,12 @@ class InvoiceGenerator:
                 client_name_part = f"_{safe_name}"
 
         # Generate client invoice (without cost price)
-        client_filename = (
-            f"invoice_{invoice_data.invoice_number}{client_name_part}_{timestamp}_client.pdf"
-        )
+        client_filename = f"invoice_{invoice_data.invoice_number}{client_name_part}_{timestamp}_client.pdf"
         client_filepath = self.settings.invoices_dir / client_filename
         self._generate_single_pdf(client_filepath, invoice_data, is_client=True)
 
         # Generate internal invoice (with cost price and profit)
-        internal_filename = (
-            f"invoice_{invoice_data.invoice_number}{client_name_part}_{timestamp}_internal.pdf"
-        )
+        internal_filename = f"invoice_{invoice_data.invoice_number}{client_name_part}_{timestamp}_internal.pdf"
         internal_filepath = self.settings.invoices_dir / internal_filename
         self._generate_single_pdf(internal_filepath, invoice_data, is_client=False)
 

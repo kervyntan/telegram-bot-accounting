@@ -79,7 +79,9 @@ class InvoiceBot:
         self.app.add_handler(CommandHandler("buycard", self.buycard_command))
         self.app.add_handler(CommandHandler("cards", self.cards_command))
         self.app.add_handler(CommandHandler("sellcard", self.sellcard_command))
-        self.app.add_handler(CommandHandler("customerorders", self.customerorders_command))
+        self.app.add_handler(
+            CommandHandler("customerorders", self.customerorders_command)
+        )
         self.app.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message)
         )
@@ -445,7 +447,9 @@ Reports will be sent automatically at 7 PM SGT."""
                 lines.append("")
             # Add profit margin and average
             if summary["total_revenue"] > 0:
-                invoice_margin = summary["total_profit"] / summary["total_revenue"] * 100
+                invoice_margin = (
+                    summary["total_profit"] / summary["total_revenue"] * 100
+                )
                 lines.append(f"📊 Invoice Profit Margin: {invoice_margin:.1f}%")
                 if summary["net_profit"] != summary["total_profit"]:
                     net_margin = summary["net_profit"] / summary["total_revenue"] * 100
@@ -514,9 +518,14 @@ Reports will be sent automatically at 7 PM SGT."""
                 lines.append("")
             # Add profit margin and average
             if summary["total_revenue"] > 0:
-                invoice_margin = summary["total_profit"] / summary["total_revenue"] * 100
+                invoice_margin = (
+                    summary["total_profit"] / summary["total_revenue"] * 100
+                )
                 lines.append(f"📊 Invoice Profit Margin: {invoice_margin:.1f}%")
-                if summary.get("net_profit", summary["total_profit"]) != summary["total_profit"]:
+                if (
+                    summary.get("net_profit", summary["total_profit"])
+                    != summary["total_profit"]
+                ):
                     net_margin = summary["net_profit"] / summary["total_revenue"] * 100
                     lines.append(f"📊 Net Profit Margin: {net_margin:.1f}%")
                 avg = summary["total_revenue"] / summary["total_invoices"]
@@ -766,10 +775,8 @@ Reports will be sent automatically at 7 PM SGT."""
                 lines.append("")
 
             if len(cards) > 20:
-                lines.append(
-                    f"_...and {len(cards) - 20} more purchases_"
-                )
-            
+                lines.append(f"_...and {len(cards) - 20} more purchases_")
+
             lines.append("")
             lines.append("💡 Use /sellcard <card_id> to mark a card as sold")
 
@@ -928,13 +935,32 @@ Reports will be sent automatically at 7 PM SGT."""
             )
 
     def run(self) -> None:
-        """Run the bot."""
-        logger.info("Starting Invoice Bot...")
+        """Run the bot (polling mode — for local development)."""
+        logger.info("Starting Invoice Bot (polling)...")
         logger.info(f"GST Rate: {int(self.settings.gst_rate * 100)}%")
         logger.info(f"GST Threshold: ${self.settings.gst_threshold}")
         logger.info("Bot is running. Press Ctrl+C to stop.")
 
         self.app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+    async def setup_webhook(self) -> None:
+        """Initialize the Application and set the Telegram webhook.
+
+        Call this once on cold-start before processing any updates.
+        """
+        await self.app.initialize()
+        await self.app.start()
+        if self.settings.webhook_url:
+            await self.app.bot.set_webhook(
+                url=self.settings.webhook_url,
+                allowed_updates=Update.ALL_TYPES,
+            )
+            logger.info(f"Webhook set to {self.settings.webhook_url}")
+
+    async def process_update(self, payload: dict) -> None:
+        """Deserialize a Telegram update dict and dispatch it."""
+        update = Update.de_json(payload, self.app.bot)
+        await self.app.process_update(update)
 
 
 def main() -> None:

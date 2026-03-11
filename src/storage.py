@@ -190,9 +190,7 @@ class InvoiceStorage:
             and record.get("payment_status") == "PARTIAL"
         ]
 
-    def update_invoice_payment(
-        self, invoice_number: str, new_deposit: float
-    ) -> bool:
+    def update_invoice_payment(self, invoice_number: str, new_deposit: float) -> bool:
         """Update deposit amount and recalculate payment status for an invoice."""
         data = self._load_data()
 
@@ -219,4 +217,3 @@ class InvoiceStorage:
                 return True
 
         return False
-
