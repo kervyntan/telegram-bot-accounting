@@ -1,4 +1,8 @@
-"""Vercel serverless function — Telegram webhook for the invoice bot."""
+"""Vercel serverless function — Telegram webhooks for invoice + catalogue bots.
+
+Both /api/webhook (invoice bot) and /api/catalogue_webhook (catalogue bot)
+are handled here so Vercel runs a single Python function file.
+"""
 
 import asyncio
 import json
@@ -13,22 +17,32 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from telegram import Update  # noqa: E402
 
 from src.bot import InvoiceBot  # noqa: E402
-from src.config import load_settings  # noqa: E402
+from src.catalogue_bot import CatalogueBot  # noqa: E402
+from src.config import load_catalogue_settings, load_settings  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
 
-async def _handle_update(payload: dict) -> None:
-    """Process a single Telegram update using a fresh Application lifecycle."""
+async def _handle_invoice_update(payload: dict) -> None:
+    """Process one invoice-bot update with a fresh Application lifecycle."""
     settings = load_settings()
-    invoice_bot = InvoiceBot(settings)
-    async with invoice_bot.app:
-        update = Update.de_json(payload, invoice_bot.app.bot)
-        await invoice_bot.app.process_update(update)
+    bot = InvoiceBot(settings)
+    async with bot.app:
+        update = Update.de_json(payload, bot.app.bot)
+        await bot.app.process_update(update)
+
+
+async def _handle_catalogue_update(payload: dict) -> None:
+    """Process one catalogue-bot update with a fresh Application lifecycle."""
+    settings = load_catalogue_settings()
+    bot = CatalogueBot(settings)
+    async with bot.app:
+        update = Update.de_json(payload, bot.app.bot)
+        await bot.app.process_update(update)
 
 
 class handler(BaseHTTPRequestHandler):
-    """Vercel serverless handler for POST /api/webhook."""
+    """Single Vercel handler that serves both bot webhooks."""
 
     def do_POST(self):
         try:
@@ -40,17 +54,25 @@ class handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
+        path = self.path.split("?")[0]
         try:
-            asyncio.run(_handle_update(payload))
+            if path == "/api/catalogue_webhook":
+                asyncio.run(_handle_catalogue_update(payload))
+            else:
+                asyncio.run(_handle_invoice_update(payload))
         except Exception:
-            logger.exception("Error processing update")
+            logger.exception("Error processing update for path %s", path)
 
         self.send_response(200)
         self.end_headers()
 
     def do_GET(self):
         """Health check endpoint."""
+        path = self.path.split("?")[0]
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        self.wfile.write(b'{"status":"ok"}')
+        if path == "/api/catalogue_webhook":
+            self.wfile.write(b'{"status":"ok","bot":"catalogue"}')
+        else:
+            self.wfile.write(b'{"status":"ok","bot":"invoice"}')
