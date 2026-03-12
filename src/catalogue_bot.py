@@ -52,9 +52,10 @@ class CatalogueBot:
         )
 
         # — Group handlers (index listings automatically) —
+        # Index plain-text messages and photo messages with captions
         self.app.add_handler(
             MessageHandler(
-                filters.TEXT & ~filters.COMMAND & filters.ChatType.GROUPS,
+                (filters.TEXT | filters.PHOTO) & ~filters.COMMAND & filters.ChatType.GROUPS,
                 self.index_message,
             )
         )
@@ -151,14 +152,32 @@ class CatalogueBot:
         except Exception:
             logger.warning("Could not notify owner", exc_info=True)
 
+    # ── Group indexing helpers ───────────────────────────────────────────────
+
+    @staticmethod
+    def _is_indexable(text: str | None) -> bool:
+        """Return True only if the text looks like a real listing.
+
+        Requires at least one digit — filters out one-word replies like
+        'Claim', 'Yours', 'Done', 'Interested', etc.
+        """
+        if not text or not text.strip():
+            return False
+        import re
+        return bool(re.search(r"\d", text))
+
     # ── Group indexing handlers ──────────────────────────────────────────────
 
     async def index_message(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        """Index a new group message as a catalogue listing."""
+        """Index a new group message (text or photo+caption) as a catalogue listing."""
         msg = update.message
         if not msg or msg.chat_id not in self.settings.catalogue_group_ids:
+            return
+        # Use caption for photo messages, text for plain messages
+        text = msg.caption if msg.photo else msg.text
+        if not self._is_indexable(text):
             return
         sender = msg.from_user
         self.storage.upsert_listing(
@@ -169,7 +188,7 @@ class CatalogueBot:
                 f"@{sender.username}" if sender and sender.username
                 else (sender.full_name if sender else "unknown")
             ),
-            text=msg.text,
+            text=text,
         )
 
     async def index_edited_message(
@@ -179,10 +198,14 @@ class CatalogueBot:
         msg = update.edited_message
         if not msg or msg.chat_id not in self.settings.catalogue_group_ids:
             return
+        # Use caption for photo messages, text for plain messages
+        text = msg.caption if msg.photo else msg.text
+        if not self._is_indexable(text):
+            return
         self.storage.mark_edited(
             chat_id=msg.chat_id,
             message_id=msg.message_id,
-            new_text=msg.text or "",
+            new_text=text,
         )
 
     # ── Webhook lifecycle ────────────────────────────────────────────────────
