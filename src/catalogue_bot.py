@@ -116,7 +116,13 @@ class CatalogueBot:
         for r in results:
             snippet = r["text"][:200].replace("*", "").replace("_", "")
             seller = r.get("sender_name", "unknown")
-            lines.append(f"• {snippet}\n  — listed by {seller}")
+            url = self.storage.build_message_url(r)
+            if url:
+                lines.append(
+                    f"• {snippet}\n  — listed by {seller}\n  🔗 {url}"
+                )
+            else:
+                lines.append(f"• {snippet}\n  — listed by {seller}")
 
         # Build DM CTA button if owner username is configured
         keyboard = None
@@ -188,6 +194,7 @@ class CatalogueBot:
                 f"@{sender.username}" if sender and sender.username
                 else (sender.full_name if sender else "unknown")
             ),
+            chat_username=msg.chat.username,
             text=text,
         )
 

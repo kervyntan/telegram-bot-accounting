@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from typing import Any
 
-from pymongo import MongoClient, TEXT
+from pymongo import TEXT, MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
 
@@ -45,6 +45,7 @@ class CatalogueStorage:
         message_id: int,
         sender_id: int,
         sender_name: str,
+        chat_username: str | None,
         text: str,
     ) -> None:
         """Insert or update a listing from a group message."""
@@ -56,6 +57,7 @@ class CatalogueStorage:
                 "$set": {
                     "sender_id": sender_id,
                     "sender_name": sender_name,
+                    "chat_username": chat_username,
                     "text": text,
                     "status": status,
                     "updated_at": now,
@@ -90,6 +92,27 @@ class CatalogueStorage:
             .limit(limit)
         )
         return list(cursor)
+
+    @staticmethod
+    def build_message_url(listing: dict[str, Any]) -> str | None:
+        """Build a clickable Telegram URL for a listing post."""
+        chat_username = listing.get("chat_username")
+        message_id = listing.get("message_id")
+        if not message_id:
+            return None
+
+        if chat_username:
+            return f"https://t.me/{chat_username}/{message_id}"
+
+        chat_id = listing.get("chat_id")
+        if isinstance(chat_id, int) and chat_id < 0:
+            # Private supergroups/channels typically use -100xxxxxxxxxx IDs.
+            chat_suffix = str(abs(chat_id))
+            if chat_suffix.startswith("100"):
+                chat_suffix = chat_suffix[3:]
+            return f"https://t.me/c/{chat_suffix}/{message_id}"
+
+        return None
 
     def log_search(self, user_id: int, user_name: str, query: str) -> None:
         """Record every search for owner analytics."""

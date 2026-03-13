@@ -67,25 +67,48 @@ class InvoiceBot:
         # Build application
         self.app = Application.builder().token(settings.telegram_bot_token).build()
 
-        # Restrict all handlers to the owner's chat only (if TELEGRAM_CHAT_ID is set)
-        owner_filter = (
-            filters.Chat(chat_id=settings.telegram_chat_id)
-            if settings.telegram_chat_id
-            else filters.ALL
-        )
+        # Restrict all handlers to owner's chat only when chat ID is valid.
+        owner_filter = filters.ALL
+        if settings.telegram_chat_id:
+            token_bot_id = self._extract_bot_id(settings.telegram_bot_token)
+            if token_bot_id and settings.telegram_chat_id == token_bot_id:
+                logger.warning(
+                    (
+                        "TELEGRAM_CHAT_ID appears to be the bot ID (%s), "
+                        "not your user/group chat ID. Owner-only filter disabled; "
+                        "set TELEGRAM_CHAT_ID to your real chat ID to re-enable it."
+                    ),
+                    token_bot_id,
+                )
+            else:
+                owner_filter = filters.Chat(chat_id=settings.telegram_chat_id)
 
         # Register handlers
         self.app.add_handler(CommandHandler("start", self.start_command, filters=owner_filter))
         self.app.add_handler(CommandHandler("help", self.help_command, filters=owner_filter))
         self.app.add_handler(CommandHandler("chatid", self.chatid_command, filters=owner_filter))
-        self.app.add_handler(CommandHandler("daily", self.daily_report_command, filters=owner_filter))
-        self.app.add_handler(CommandHandler("weekly", self.weekly_report_command, filters=owner_filter))
-        self.app.add_handler(CommandHandler("inception", self.inception_report_command, filters=owner_filter))
-        self.app.add_handler(CommandHandler("partial", self.partial_invoices_command, filters=owner_filter))
-        self.app.add_handler(CommandHandler("payment", self.update_payment_command, filters=owner_filter))
+        self.app.add_handler(
+            CommandHandler("daily", self.daily_report_command, filters=owner_filter)
+        )
+        self.app.add_handler(
+            CommandHandler("weekly", self.weekly_report_command, filters=owner_filter)
+        )
+        self.app.add_handler(
+            CommandHandler(
+                "inception", self.inception_report_command, filters=owner_filter
+            )
+        )
+        self.app.add_handler(
+            CommandHandler("partial", self.partial_invoices_command, filters=owner_filter)
+        )
+        self.app.add_handler(
+            CommandHandler("payment", self.update_payment_command, filters=owner_filter)
+        )
         self.app.add_handler(CommandHandler("buycard", self.buycard_command, filters=owner_filter))
         self.app.add_handler(CommandHandler("cards", self.cards_command, filters=owner_filter))
-        self.app.add_handler(CommandHandler("sellcard", self.sellcard_command, filters=owner_filter))
+        self.app.add_handler(
+            CommandHandler("sellcard", self.sellcard_command, filters=owner_filter)
+        )
         self.app.add_handler(
             CommandHandler("customerorders", self.customerorders_command, filters=owner_filter)
         )
@@ -110,6 +133,14 @@ class InvoiceBot:
                 days=(4,),  # Friday is day 4 (Monday=0)
                 name="weekly_report",
             )
+
+    @staticmethod
+    def _extract_bot_id(token: str) -> int | None:
+        """Extract bot ID from a bot token (`<bot_id>:<secret>`)."""
+        try:
+            return int(token.split(":", 1)[0])
+        except (ValueError, AttributeError, IndexError):
+            return None
 
     async def start_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
