@@ -34,9 +34,7 @@ class CatalogueStorage:
         # Full-text search index on listing text
         self.listings.create_index([("text", TEXT)])
         # Unique index so upsert matches correctly
-        self.listings.create_index(
-            [("chat_id", 1), ("message_id", 1)], unique=True
-        )
+        self.listings.create_index([("chat_id", 1), ("message_id", 1)], unique=True)
         self.listings.create_index("status")
 
     def upsert_listing(

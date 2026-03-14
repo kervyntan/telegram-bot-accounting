@@ -15,6 +15,7 @@ from telegram.ext import (
     Application,
     CommandHandler,
     ContextTypes,
+    ConversationHandler,
     MessageHandler,
     filters,
 )
@@ -31,6 +32,10 @@ try:
     MONGO_AVAILABLE = True
 except ImportError:
     MONGO_AVAILABLE = False
+
+# Conversation states for /consolidate
+_CONSOLIDATE_RATE = 1
+_CONSOLIDATE_ITEMS = 2
 
 # Configure logging
 logging.basicConfig(
@@ -84,9 +89,15 @@ class InvoiceBot:
                 owner_filter = filters.Chat(chat_id=settings.telegram_chat_id)
 
         # Register handlers
-        self.app.add_handler(CommandHandler("start", self.start_command, filters=owner_filter))
-        self.app.add_handler(CommandHandler("help", self.help_command, filters=owner_filter))
-        self.app.add_handler(CommandHandler("chatid", self.chatid_command, filters=owner_filter))
+        self.app.add_handler(
+            CommandHandler("start", self.start_command, filters=owner_filter)
+        )
+        self.app.add_handler(
+            CommandHandler("help", self.help_command, filters=owner_filter)
+        )
+        self.app.add_handler(
+            CommandHandler("chatid", self.chatid_command, filters=owner_filter)
+        )
         self.app.add_handler(
             CommandHandler("daily", self.daily_report_command, filters=owner_filter)
         )
@@ -99,21 +110,59 @@ class InvoiceBot:
             )
         )
         self.app.add_handler(
-            CommandHandler("partial", self.partial_invoices_command, filters=owner_filter)
+            CommandHandler(
+                "partial", self.partial_invoices_command, filters=owner_filter
+            )
         )
         self.app.add_handler(
             CommandHandler("payment", self.update_payment_command, filters=owner_filter)
         )
-        self.app.add_handler(CommandHandler("buycard", self.buycard_command, filters=owner_filter))
-        self.app.add_handler(CommandHandler("cards", self.cards_command, filters=owner_filter))
+        self.app.add_handler(
+            CommandHandler("buycard", self.buycard_command, filters=owner_filter)
+        )
+        self.app.add_handler(
+            CommandHandler("cards", self.cards_command, filters=owner_filter)
+        )
         self.app.add_handler(
             CommandHandler("sellcard", self.sellcard_command, filters=owner_filter)
         )
         self.app.add_handler(
-            CommandHandler("customerorders", self.customerorders_command, filters=owner_filter)
+            CommandHandler(
+                "customerorders", self.customerorders_command, filters=owner_filter
+            )
         )
         self.app.add_handler(
-            MessageHandler(filters.TEXT & ~filters.COMMAND & owner_filter, self.handle_message)
+            ConversationHandler(
+                entry_points=[
+                    CommandHandler(
+                        "consolidate", self.consolidate_command, filters=owner_filter
+                    )
+                ],
+                states={
+                    _CONSOLIDATE_RATE: [
+                        MessageHandler(
+                            filters.TEXT & ~filters.COMMAND & owner_filter,
+                            self.consolidate_get_rate,
+                        )
+                    ],
+                    _CONSOLIDATE_ITEMS: [
+                        MessageHandler(
+                            filters.TEXT & ~filters.COMMAND & owner_filter,
+                            self.consolidate_get_items,
+                        )
+                    ],
+                },
+                fallbacks=[
+                    CommandHandler(
+                        "cancel", self.consolidate_cancel, filters=owner_filter
+                    )
+                ],
+            )
+        )
+        self.app.add_handler(
+            MessageHandler(
+                filters.TEXT & ~filters.COMMAND & owner_filter, self.handle_message
+            )
         )
 
         # Schedule daily and weekly reports
@@ -162,6 +211,7 @@ I can help you generate professional invoices from simple messages.
 /cards - Show all active card purchases
 /sellcard - Mark card as sold (remove from P/L)
 /customerorders - List all orders for a customer
+/consolidate - Find best item combo to ship under GST threshold
 
 📊 Automatic Reports:
 • Daily report sent at 7 PM SGT
@@ -971,6 +1021,198 @@ Reports will be sent automatically at 7 PM SGT."""
                 f"Error marking card as sold in chat {update.message.chat_id}: {e}",
                 exc_info=True,
             )
+
+    # ------------------------------------------------------------------
+    # /consolidate — GST-avoidance shipping calculator
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _knapsack_best(
+        items: list[tuple[str, float]], capacity_sgd: float
+    ) -> list[tuple[str, float]]:
+        """Return the highest-value subset of items whose total <= capacity_sgd (0/1 knapsack)."""
+        n = len(items)
+        cap = int(capacity_sgd * 100)  # work in integer cents
+        weights = [round(price * 100) for _, price in items]
+
+        # dp[i][w] = max value (cents) achievable with first i items within budget w
+        dp = [[0] * (cap + 1) for _ in range(n + 1)]
+        for i in range(1, n + 1):
+            w = weights[i - 1]
+            for j in range(cap + 1):
+                dp[i][j] = dp[i - 1][j]
+                if w <= j:
+                    dp[i][j] = max(dp[i][j], dp[i - 1][j - w] + w)
+
+        # Backtrack to find which items were selected
+        selected: list[tuple[str, float]] = []
+        j = cap
+        for i in range(n, 0, -1):
+            if dp[i][j] != dp[i - 1][j]:
+                selected.append(items[i - 1])
+                j -= weights[i - 1]
+
+        return selected
+
+    async def consolidate_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> int:
+        """Handle /consolidate — step 1: ask for the JPY/SGD rate."""
+        if not update.message:
+            return ConversationHandler.END
+        await update.message.reply_text(
+            "📦 *Shipping Consolidation Calculator*\n\n"
+            "What is today's SGD → JPY rate?\n"
+            "_(e.g. enter `124` if 1 SGD = 124 JPY)_\n\n"
+            "Send /cancel to abort.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return _CONSOLIDATE_RATE
+
+    async def consolidate_get_rate(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> int:
+        """Handle /consolidate — step 2: receive rate, ask for items."""
+        if not update.message or not update.message.text:
+            return _CONSOLIDATE_RATE
+        try:
+            rate = float(update.message.text.strip().replace(",", ""))
+            if rate <= 0:
+                raise ValueError("rate must be positive")
+        except ValueError:
+            await update.message.reply_text(
+                "❌ Invalid rate. Please enter a positive number like `124`.",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            return _CONSOLIDATE_RATE
+
+        context.user_data["consolidate_rate"] = rate
+        await update.message.reply_text(
+            f"✅ Rate saved: *1 SGD = {rate:,.0f} JPY*\n\n"
+            "Now list your items — one per line:\n"
+            "`Item Name: ¥15000`  or  `Item Name: 15000`\n\n"
+            "Example:\n"
+            "```\n"
+            "Charizard ex: ¥15000\n"
+            "Pikachu Gold Star: ¥8500\n"
+            "Mewtwo VMAX: ¥25000\n"
+            "```\n"
+            "Send all items in one message when ready.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return _CONSOLIDATE_ITEMS
+
+    async def consolidate_get_items(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> int:
+        """Handle /consolidate — step 3: parse items and run knapsack."""
+        if not update.message or not update.message.text:
+            return _CONSOLIDATE_ITEMS
+
+        rate: float = context.user_data.get("consolidate_rate", 1.0)
+        gst_limit = self.settings.gst_threshold  # default 400.00 SGD
+
+        # Parse items: accept "Name: ¥12345" or "Name: 12345"
+        items: list[tuple[str, float]] = []
+        errors: list[str] = []
+        for raw_line in update.message.text.strip().splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if ":" not in line:
+                errors.append(f"• `{line}` — missing colon separator")
+                continue
+            name_part, price_part = line.rsplit(":", 1)
+            name = name_part.strip()
+            price_str = price_part.strip().lstrip("¥").replace(",", "").strip()
+            try:
+                yen_price = float(price_str)
+                if yen_price <= 0:
+                    raise ValueError
+                sgd_price = round(yen_price / rate, 2)
+                items.append((name, sgd_price))
+            except ValueError:
+                errors.append(f"• `{line}` — invalid price")
+
+        if errors:
+            error_block = "\n".join(errors)
+            await update.message.reply_text(
+                f"❌ Could not parse the following lines:\n{error_block}\n\n"
+                "Please re-send your full list with corrected entries.",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            return _CONSOLIDATE_ITEMS
+
+        if not items:
+            await update.message.reply_text(
+                "❌ No valid items found. Please re-send your list.",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            return _CONSOLIDATE_ITEMS
+
+        # Filter out items that individually exceed the GST limit
+        over_limit = [(n, p) for n, p in items if p >= gst_limit]
+        valid_items = [(n, p) for n, p in items if p < gst_limit]
+
+        # Run knapsack on items that fit within the limit
+        capacity = gst_limit - 0.01  # stay strictly under $400.00
+        selected = self._knapsack_best(valid_items, capacity) if valid_items else []
+        not_selected = [item for item in valid_items if item not in selected]
+
+        total_yen = sum(round(p * rate) for _, p in selected)
+        total_sgd = sum(p for _, p in selected)
+
+        # Build response
+        lines = [
+            f"📦 *Best consolidation under SGD ${gst_limit:.2f}*",
+            f"_(Rate: 1 SGD = {rate:,.0f} JPY)_",
+            "",
+        ]
+
+        if selected:
+            lines.append("✅ *Include in this shipment:*")
+            for name, sgd in sorted(selected, key=lambda x: -x[1]):
+                yen = round(sgd * rate)
+                lines.append(f"  • {name}: ¥{yen:,} (SGD {sgd:.2f})")
+            lines.extend(
+                [
+                    "",
+                    f"💴 Total: ¥{total_yen:,}",
+                    f"💵 Total: SGD {total_sgd:.2f} "
+                    f"_(${gst_limit - total_sgd:.2f} under GST threshold)_",
+                ]
+            )
+        else:
+            lines.append("⚠️ No combination fits under the GST threshold.")
+
+        if not_selected:
+            lines.append("")
+            lines.append("🔸 *Left out (ship separately or later):*")
+            for name, sgd in sorted(not_selected, key=lambda x: -x[1]):
+                yen = round(sgd * rate)
+                lines.append(f"  • {name}: ¥{yen:,} (SGD {sgd:.2f})")
+
+        if over_limit:
+            lines.append("")
+            lines.append(f"⛔ *Items exceeding SGD ${gst_limit:.2f} on their own:*")
+            for name, sgd in over_limit:
+                yen = round(sgd * rate)
+                lines.append(f"  • {name}: ¥{yen:,} (SGD {sgd:.2f})")
+
+        await update.message.reply_text(
+            "\n".join(lines), parse_mode=ParseMode.MARKDOWN
+        )
+        context.user_data.pop("consolidate_rate", None)
+        return ConversationHandler.END
+
+    async def consolidate_cancel(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> int:
+        """Cancel the /consolidate conversation."""
+        if update.message:
+            await update.message.reply_text("❌ Consolidation calculator cancelled.")
+        context.user_data.pop("consolidate_rate", None)
+        return ConversationHandler.END
 
     def run(self) -> None:
         """Run the bot (polling mode — for local development)."""

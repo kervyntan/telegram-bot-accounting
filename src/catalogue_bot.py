@@ -29,9 +29,7 @@ class CatalogueBot:
         else:
             raise RuntimeError("MONGODB_URI is required for the catalogue bot")
 
-        self.app = (
-            Application.builder().token(settings.catalogue_bot_token).build()
-        )
+        self.app = Application.builder().token(settings.catalogue_bot_token).build()
 
         # — DM handlers (public users search here) —
         self.app.add_handler(
@@ -55,7 +53,9 @@ class CatalogueBot:
         # Index plain-text messages and photo messages with captions
         self.app.add_handler(
             MessageHandler(
-                (filters.TEXT | filters.PHOTO) & ~filters.COMMAND & filters.ChatType.GROUPS,
+                (filters.TEXT | filters.PHOTO)
+                & ~filters.COMMAND
+                & filters.ChatType.GROUPS,
                 self.index_message,
             )
         )
@@ -118,9 +118,7 @@ class CatalogueBot:
             seller = r.get("sender_name", "unknown")
             url = self.storage.build_message_url(r)
             if url:
-                lines.append(
-                    f"• {snippet}\n  — listed by {seller}\n  🔗 {url}"
-                )
+                lines.append(f"• {snippet}\n  — listed by {seller}\n  🔗 {url}")
             else:
                 lines.append(f"• {snippet}\n  — listed by {seller}")
 
@@ -128,12 +126,14 @@ class CatalogueBot:
         keyboard = None
         if self.settings.owner_username:
             keyboard = InlineKeyboardMarkup(
-                [[
-                    InlineKeyboardButton(
-                        "💬 DM Seller",
-                        url=f"https://t.me/{self.settings.owner_username}",
-                    )
-                ]]
+                [
+                    [
+                        InlineKeyboardButton(
+                            "💬 DM Seller",
+                            url=f"https://t.me/{self.settings.owner_username}",
+                        )
+                    ]
+                ]
             )
 
         await update.message.reply_text(
@@ -142,9 +142,7 @@ class CatalogueBot:
             reply_markup=keyboard,
         )
 
-    async def _notify_owner(
-        self, user_id: int, user_label: str, query: str
-    ) -> None:
+    async def _notify_owner(self, user_id: int, user_label: str, query: str) -> None:
         """Send a silent notification to the owner about a search."""
         if not self.settings.owner_chat_id:
             return
@@ -170,6 +168,7 @@ class CatalogueBot:
         if not text or not text.strip():
             return False
         import re
+
         return bool(re.search(r"\d", text))
 
     # ── Group indexing handlers ──────────────────────────────────────────────
@@ -191,7 +190,8 @@ class CatalogueBot:
             message_id=msg.message_id,
             sender_id=sender.id if sender else 0,
             sender_name=(
-                f"@{sender.username}" if sender and sender.username
+                f"@{sender.username}"
+                if sender and sender.username
                 else (sender.full_name if sender else "unknown")
             ),
             chat_username=msg.chat.username,
