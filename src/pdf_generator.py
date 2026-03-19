@@ -65,10 +65,10 @@ class InvoiceGenerator:
         self._draw_header(c, width, height, is_client)
         self._draw_invoice_details(c, invoice_data, height)
         if is_client:
-            self._draw_items_table_client(c, invoice_data, height)
+            y = self._draw_items_table_client(c, invoice_data, width, height)
         else:
-            self._draw_items_table_internal(c, invoice_data, height)
-        self._draw_totals(c, invoice_data, width, height, is_client)
+            y = self._draw_items_table_internal(c, invoice_data, width, height)
+        self._draw_totals(c, invoice_data, width, height, is_client, y)
         self._draw_footer(c, width, height)
 
         c.save()
@@ -146,20 +146,111 @@ class InvoiceGenerator:
             c.setFont("Helvetica", 10)
             c.drawString(60 * mm, y, invoice_data.customer_name)
 
-    def _draw_items_table_client(
-        self, c: canvas.Canvas, invoice_data: InvoiceData, height: float
-    ) -> None:
-        """Draw items table for client (without cost price)."""
-        y = height - 95 * mm
+    def _get_table_style(self) -> TableStyle:
+        """Return the common table style for items tables."""
+        return TableStyle(
+            [
+                # Header styling
+                ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+                ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 10),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+                # Body styling
+                ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
+                ("ALIGN", (0, 1), (0, -1), "LEFT"),
+                ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 1), (-1, -1), 9),
+                ("TOPPADDING", (0, 1), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 1), (-1, -1), 6),
+                # Grid
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                # Alternating rows
+                (
+                    "ROWBACKGROUNDS",
+                    (0, 1),
+                    (-1, -1),
+                    [colors.white, colors.lightgrey],
+                ),
+            ]
+        )
 
-        # Table headers (no cost price column)
+    def _draw_items_paginated(
+        self,
+        c: canvas.Canvas,
+        headers: list[str],
+        data_rows: list[list[str]],
+        col_widths: list[float],
+        width: float,
+        height: float,
+    ) -> float:
+        """Draw items table with pagination support. Returns Y position after last table."""
+        TABLE_TOP_FIRST = height - 95 * mm
+        TABLE_TOP_CONT = height - 25 * mm
+        BOTTOM_MARGIN = 30 * mm
+        LEFT_MARGIN = 30 * mm
+        TABLE_WIDTH = sum(col_widths)
+
+        table_style = self._get_table_style()
+        table_top = TABLE_TOP_FIRST
+        remaining = list(data_rows)
+
+        while remaining:
+            available_height = table_top - BOTTOM_MARGIN
+
+            # Binary search for how many rows fit
+            lo, hi = 1, len(remaining)
+            best = 0
+            while lo <= hi:
+                mid = (lo + hi) // 2
+                chunk = [headers] + remaining[:mid]
+                t = Table(chunk, colWidths=col_widths)
+                t.setStyle(table_style)
+                _, th = t.wrapOn(c, TABLE_WIDTH, available_height)
+                if th <= available_height:
+                    best = mid
+                    lo = mid + 1
+                else:
+                    hi = mid - 1
+
+            if best == 0:
+                # Can't fit even one row — new page
+                self._draw_footer(c, width, height)
+                c.showPage()
+                table_top = TABLE_TOP_CONT
+                continue
+
+            chunk = [headers] + remaining[:best]
+            remaining = remaining[best:]
+
+            t = Table(chunk, colWidths=col_widths)
+            t.setStyle(table_style)
+            _, th = t.wrapOn(c, TABLE_WIDTH, available_height)
+            t.drawOn(c, LEFT_MARGIN, table_top - th)
+            y_after = table_top - th
+
+            if remaining:
+                self._draw_footer(c, width, height)
+                c.showPage()
+                table_top = TABLE_TOP_CONT
+
+        return y_after
+
+    def _draw_items_table_client(
+        self,
+        c: canvas.Canvas,
+        invoice_data: InvoiceData,
+        width: float,
+        height: float,
+    ) -> float:
+        """Draw items table for client (without cost price). Returns Y after table."""
         headers = ["Item", "Unit Price", "Qty", "Amount"]
         col_widths = [100 * mm, 30 * mm, 15 * mm, 25 * mm]
 
-        # Prepare data
-        data = [headers]
+        data_rows = []
         for item in invoice_data.items:
-            data.append(
+            data_rows.append(
                 [
                     item.name,
                     f"${item.sale_price:.2f}",
@@ -168,56 +259,22 @@ class InvoiceGenerator:
                 ]
             )
 
-        # Create table
-        table = Table(data, colWidths=col_widths)
-        table.setStyle(
-            TableStyle(
-                [
-                    # Header styling
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
-                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-                    ("ALIGN", (0, 0), (-1, 0), "CENTER"),
-                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                    ("FONTSIZE", (0, 0), (-1, 0), 10),
-                    ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
-                    # Body styling
-                    ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
-                    ("ALIGN", (0, 1), (0, -1), "LEFT"),
-                    ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-                    ("FONTSIZE", (0, 1), (-1, -1), 9),
-                    ("TOPPADDING", (0, 1), (-1, -1), 6),
-                    ("BOTTOMPADDING", (0, 1), (-1, -1), 6),
-                    # Grid
-                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                    # Alternating rows
-                    (
-                        "ROWBACKGROUNDS",
-                        (0, 1),
-                        (-1, -1),
-                        [colors.white, colors.lightgrey],
-                    ),
-                ]
-            )
-        )
-
-        # Draw table
-        table.wrapOn(c, 160 * mm, 200 * mm)
-        table.drawOn(c, 30 * mm, y - len(data) * 10 * mm)
+        return self._draw_items_paginated(c, headers, data_rows, col_widths, width, height)
 
     def _draw_items_table_internal(
-        self, c: canvas.Canvas, invoice_data: InvoiceData, height: float
-    ) -> None:
-        """Draw items table for internal use (with cost price and profit)."""
-        y = height - 95 * mm
-
-        # Table headers (with cost price)
+        self,
+        c: canvas.Canvas,
+        invoice_data: InvoiceData,
+        width: float,
+        height: float,
+    ) -> float:
+        """Draw items table for internal use (with cost price). Returns Y after table."""
         headers = ["Item", "Cost Price", "Sale Price", "Qty", "Amount"]
         col_widths = [70 * mm, 25 * mm, 25 * mm, 15 * mm, 25 * mm]
 
-        # Prepare data
-        data = [headers]
+        data_rows = []
         for item in invoice_data.items:
-            data.append(
+            data_rows.append(
                 [
                     item.name,
                     f"${item.cost_price:.2f}",
@@ -227,41 +284,7 @@ class InvoiceGenerator:
                 ]
             )
 
-        # Create table
-        table = Table(data, colWidths=col_widths)
-        table.setStyle(
-            TableStyle(
-                [
-                    # Header styling
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
-                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-                    ("ALIGN", (0, 0), (-1, 0), "CENTER"),
-                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                    ("FONTSIZE", (0, 0), (-1, 0), 10),
-                    ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
-                    # Body styling
-                    ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
-                    ("ALIGN", (0, 1), (0, -1), "LEFT"),
-                    ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-                    ("FONTSIZE", (0, 1), (-1, -1), 9),
-                    ("TOPPADDING", (0, 1), (-1, -1), 6),
-                    ("BOTTOMPADDING", (0, 1), (-1, -1), 6),
-                    # Grid
-                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                    # Alternating rows
-                    (
-                        "ROWBACKGROUNDS",
-                        (0, 1),
-                        (-1, -1),
-                        [colors.white, colors.lightgrey],
-                    ),
-                ]
-            )
-        )
-
-        # Draw table
-        table.wrapOn(c, 160 * mm, 200 * mm)
-        table.drawOn(c, 30 * mm, y - len(data) * 10 * mm)
+        return self._draw_items_paginated(c, headers, data_rows, col_widths, width, height)
 
     def _draw_totals(
         self,
@@ -270,10 +293,20 @@ class InvoiceGenerator:
         width: float,
         height: float,
         is_client: bool = True,
+        y_after_items: float = 0,
     ) -> None:
-        """Draw totals section."""
+        """Draw totals section below the items table."""
         x = width - 80 * mm
-        y = height - 200 * mm
+        # Position totals below items with some spacing
+        y = y_after_items - 10 * mm
+
+        # Estimate space needed for totals section
+        totals_height = 50 * mm
+        if y - totals_height < 25 * mm:
+            # Not enough room — start a new page
+            self._draw_footer(c, width, height)
+            c.showPage()
+            y = height - 25 * mm
 
         c.setFont("Helvetica-Bold", 10)
 
