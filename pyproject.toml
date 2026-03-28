@@ -16,6 +16,12 @@ dependencies = [
 dev = [
     "ruff>=0.1.0",
 ]
+scraper = [
+    "opencv-python-headless>=4.8",
+    "numpy>=1.24",
+    "httpx>=0.25",
+    "google-genai>=1.0",
+]
 
 [build-system]
 requires = ["hatchling"]
