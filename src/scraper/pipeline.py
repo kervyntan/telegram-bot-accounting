@@ -1,10 +1,8 @@
 """Orchestrator: ties Phases 1-3 together into a single async pipeline."""
 
-import hashlib
 import logging
 from dataclasses import dataclass
 
-from .image_processor import process_listing_image
 from .marketplace import (
     SEARCH_KEYWORDS,
     RawListing,
@@ -21,16 +19,17 @@ logger = logging.getLogger(__name__)
 class ProcessedListing:
     """A fully processed listing ready for Telegram posting."""
 
+    listing_id: str  # Doorzo Asin — used for de-duplication
     english_title: str
     final_price: int  # SGD, whole number
-    processed_image_path: str | None
+    image_url: str  # Full-res image URL (sent directly to Telegram)
     source_url: str  # admin-only tracking
     raw_price_jpy: int
-    category: str  # "ar_chr_rr" or "sar_csr_sr"
+    category: str
 
 
 class ScraperPipeline:
-    """End-to-end pipeline: scrape → translate → price."""
+    """End-to-end pipeline: scrape → de-duplicate → translate → price."""
 
     def __init__(
         self,
@@ -52,8 +51,16 @@ class ScraperPipeline:
         self,
         categories: list[str] | None = None,
         custom_keywords: dict[str, list[str]] | None = None,
+        seen_listing_ids: set[str] | None = None,
     ) -> list[ProcessedListing]:
-        """Execute the full pipeline."""
+        """Execute the full pipeline.
+
+        Args:
+            categories: Optional list of category keys to scrape.
+            custom_keywords: Override default SEARCH_KEYWORDS.
+            seen_listing_ids: Set of listing IDs already sent — these will be
+                skipped to avoid duplicates.
+        """
         keywords_map = custom_keywords or SEARCH_KEYWORDS
         if categories:
             keywords_map = {k: v for k, v in keywords_map.items() if k in categories}
@@ -78,6 +85,18 @@ class ScraperPipeline:
         if not all_raw:
             return []
 
+        # De-duplicate against previously sent listings
+        if seen_listing_ids:
+            before = len(all_raw)
+            all_raw = [r for r in all_raw if r.listing_id not in seen_listing_ids]
+            skipped = before - len(all_raw)
+            if skipped:
+                logger.info(f"De-duplicated: skipped {skipped} already-sent listings")
+
+        if not all_raw:
+            logger.info("No new listings after de-duplication")
+            return []
+
         # Phase 2: Batch translate all titles in a single API call
         logger.info("Phase 2: Batch translating titles...")
         raw_titles = [listing.raw_title for listing in all_raw]
@@ -87,16 +106,12 @@ class ScraperPipeline:
             model=self.gemini_model,
         )
 
-        # Phase 3: Process images and calculate prices
+        # Phase 3: Calculate prices (images are passed through as URLs)
         results: list[ProcessedListing] = []
         for i, listing in enumerate(all_raw):
-            listing_id = hashlib.md5(
-                f"{listing.source_url}{listing.raw_title}".encode()
-            ).hexdigest()[:12]
-
-            logger.info(f"Processing listing {i + 1}/{len(all_raw)}: {translated_titles[i][:60]}...")
-
-            image_path = await process_listing_image(listing.image_url, listing_id)
+            logger.info(
+                f"Processing listing {i + 1}/{len(all_raw)}: {translated_titles[i][:60]}..."
+            )
 
             final_price = calculate_price(
                 listing.raw_price_jpy,
@@ -106,9 +121,10 @@ class ScraperPipeline:
 
             results.append(
                 ProcessedListing(
+                    listing_id=listing.listing_id,
                     english_title=translated_titles[i],
                     final_price=final_price,
-                    processed_image_path=image_path,
+                    image_url=listing.image_url,
                     source_url=listing.source_url,
                     raw_price_jpy=listing.raw_price_jpy,
                     category=listing.category,

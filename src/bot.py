@@ -160,6 +160,13 @@ class InvoiceBot:
                 name="weekly_report",
             )
 
+            # Daily scrape at 12 AM SGT (midnight)
+            job_queue.run_daily(
+                self._scheduled_scrape,
+                time=time(hour=0, minute=0, tzinfo=SGT),
+                name="daily_scrape",
+            )
+
     @staticmethod
     def _extract_bot_id(token: str) -> int | None:
         """Extract bot ID from a bot token (`<bot_id>:<secret>`)."""
@@ -190,7 +197,8 @@ I can help you generate professional invoices from simple messages.
 
 📊 Automatic Reports:
 • Daily report sent at 7 PM SGT
-• Weekly report sent every Friday at 7 PM SGT"""
+• Weekly report sent every Friday at 7 PM SGT
+• Daily scrape at 12 AM SGT (new listings only)"""
 
         await update.message.reply_text(welcome_message)
 
@@ -974,13 +982,98 @@ Reports will be sent automatically at 7 PM SGT."""
     # /scrape — automated sourcing from Japanese marketplaces
     # ------------------------------------------------------------------
 
+    def _get_scraper_listing_storage(self):
+        """Lazily get ScraperListingStorage (requires MongoDB)."""
+        if not self.settings.mongodb_uri:
+            return None
+        from .mongo_storage import ScraperListingStorage
+
+        return ScraperListingStorage(self.settings.mongodb_uri, self.settings.mongodb_database)
+
+    async def _run_scrape_and_post(self, categories=None):
+        """Run the scraper pipeline, de-duplicate, post new listings, and return stats.
+
+        Uses the catalogue bot token to post to the scraper channel.
+        Shared between /scrape command and the scheduled daily job.
+        Returns (posted_count, total_count, listings) or raises on failure.
+        """
+        from telegram import Bot
+
+        from .scraper import ScraperPipeline
+
+        topic_map = {
+            "pokemon_promo": self.settings.scraper_topic_pokemon_promo,
+        }
+
+        # Use catalogue bot for posting to the channel
+        catalogue_bot = Bot(token=self.settings.catalogue_bot_token)
+
+        # Load already-sent listing IDs from MongoDB
+        scraper_storage = self._get_scraper_listing_storage()
+        seen_ids = scraper_storage.get_seen_ids() if scraper_storage else set()
+
+        pipeline = ScraperPipeline(
+            gemini_api_key=self.settings.gemini_api_key,
+            markup=self.settings.scraper_markup,
+            min_price=self.settings.scraper_min_price,
+            max_price=self.settings.scraper_max_price,
+        )
+
+        listings = await pipeline.run(categories=categories, seen_listing_ids=seen_ids)
+
+        if not listings:
+            if scraper_storage:
+                scraper_storage.close()
+            return 0, 0, []
+
+        posted = 0
+        for listing in listings:
+            topic_id = topic_map.get(listing.category)
+            caption = f"*{listing.english_title}*\nSGD ${listing.final_price}"
+
+            for attempt in range(3):
+                try:
+                    await catalogue_bot.send_photo(
+                        chat_id=self.settings.scraper_channel_id,
+                        message_thread_id=topic_id,
+                        photo=listing.image_url,
+                        caption=caption,
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                    # Mark as sent in MongoDB
+                    if scraper_storage:
+                        scraper_storage.mark_sent(
+                            listing.listing_id,
+                            listing.english_title,
+                            listing.source_url,
+                        )
+                    posted += 1
+                    break
+                except Exception as e:
+                    error_msg = str(e)
+                    if "Flood control" in error_msg or "429" in error_msg:
+                        wait = 25 if attempt < 2 else 0
+                        if wait:
+                            logger.warning(f"Rate limited, waiting {wait}s...")
+                            await asyncio.sleep(wait)
+                            continue
+                    logger.error(f"Failed to post listing: {e}")
+                    break
+
+            # Pace sends to avoid Telegram flood control
+            await asyncio.sleep(1.5)
+
+        if scraper_storage:
+            scraper_storage.close()
+
+        return posted, len(listings), listings
+
     async def scrape_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle /scrape command — run the scraper pipeline and post listings.
+        """Handle /scrape command — run the scraper pipeline and post new listings.
 
         Usage:
-            /scrape              — scrape all categories
-            /scrape ar_chr_rr    — scrape only AR/CHR/RR
-            /scrape sar_csr_sr   — scrape only SAR/CSR/SR
+            /scrape                — scrape all categories
+            /scrape pokemon_promo  — scrape only Pokémon promo
         """
         if not update.message:
             return
@@ -989,22 +1082,22 @@ Reports will be sent automatically at 7 PM SGT."""
         if not self.settings.gemini_api_key:
             await update.message.reply_text("❌ GEMINI_API_KEY not configured.")
             return
+        if not self.settings.catalogue_bot_token:
+            await update.message.reply_text("❌ CATALOGUE_BOT_TOKEN not configured.")
+            return
         if not self.settings.scraper_channel_id:
             await update.message.reply_text("❌ SCRAPER_CHANNEL_ID not configured.")
             return
 
-        topic_map = {
-            "ar_chr_rr": self.settings.scraper_topic_ar_chr_rr,
-            "sar_csr_sr": self.settings.scraper_topic_sar_csr_sr,
-        }
+        valid_categories = {"pokemon_promo"}
 
         # Parse category filter
         categories = None
         if context.args:
             cat = context.args[0].lower()
-            if cat not in topic_map:
+            if cat not in valid_categories:
                 await update.message.reply_text(
-                    "❌ Unknown category. Use `ar_chr_rr` or `sar_csr_sr`.",
+                    f"❌ Unknown category. Use: {', '.join(sorted(valid_categories))}",
                     parse_mode=ParseMode.MARKDOWN,
                 )
                 return
@@ -1013,51 +1106,18 @@ Reports will be sent automatically at 7 PM SGT."""
         status_msg = await update.message.reply_text("⏳ Starting scraper pipeline...")
 
         try:
-            from .scraper import ScraperPipeline
-
-            pipeline = ScraperPipeline(
-                gemini_api_key=self.settings.gemini_api_key,
-                markup=self.settings.scraper_markup,
-                min_price=self.settings.scraper_min_price,
-                max_price=self.settings.scraper_max_price,
+            posted, total, listings = await self._run_scrape_and_post(
+                categories=categories
             )
 
-            listings = await pipeline.run(categories=categories)
-
-            if not listings:
-                await status_msg.edit_text("⚠️ No listings found matching criteria.")
+            if total == 0:
+                await status_msg.edit_text("⚠️ No new listings found.")
                 return
 
-            await status_msg.edit_text(f"✅ Found {len(listings)} listings. Posting to channel...")
-
-            posted = 0
-            for listing in listings:
-                topic_id = topic_map.get(listing.category)
-                caption = f"*{listing.english_title}*\nSGD ${listing.final_price}"
-
-                try:
-                    if listing.processed_image_path:
-                        with open(listing.processed_image_path, "rb") as photo:
-                            await context.bot.send_photo(
-                                chat_id=self.settings.scraper_channel_id,
-                                message_thread_id=topic_id,
-                                photo=photo,
-                                caption=caption,
-                                parse_mode=ParseMode.MARKDOWN,
-                            )
-                    else:
-                        await context.bot.send_message(
-                            chat_id=self.settings.scraper_channel_id,
-                            message_thread_id=topic_id,
-                            text=caption,
-                            parse_mode=ParseMode.MARKDOWN,
-                        )
-                    posted += 1
-                except Exception as e:
-                    logger.error(f"Failed to post listing: {e}")
+            await status_msg.edit_text(f"✅ Posted {posted}/{total} new listings to channel.")
 
             # Send summary to admin (with source URLs for tracking)
-            summary_lines = ["📊 *Scrape Summary*", f"Posted: {posted}/{len(listings)}", ""]
+            summary_lines = ["📊 *Scrape Summary*", f"Posted: {posted}/{total}", ""]
             for listing in listings:
                 summary_lines.append(
                     f"• {listing.english_title}\n"
@@ -1066,7 +1126,6 @@ Reports will be sent automatically at 7 PM SGT."""
                 )
 
             await update.message.reply_text("\n".join(summary_lines), parse_mode=ParseMode.MARKDOWN)
-            await status_msg.delete()
 
         except ImportError:
             await status_msg.edit_text(
@@ -1077,6 +1136,31 @@ Reports will be sent automatically at 7 PM SGT."""
         except Exception as e:
             logger.error(f"Scraper pipeline failed: {e}", exc_info=True)
             await status_msg.edit_text(f"❌ Scraper failed: {e}")
+
+    async def _scheduled_scrape(self, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Scheduled daily scrape — runs at 12 AM SGT, posts only new listings."""
+        if not self.settings.gemini_api_key or not self.settings.scraper_channel_id:
+            logger.warning("Scheduled scrape skipped: missing GEMINI_API_KEY or SCRAPER_CHANNEL_ID")
+            return
+
+        logger.info("Starting scheduled daily scrape...")
+        try:
+            posted, total, _ = await self._run_scrape_and_post()
+            logger.info(f"Scheduled scrape complete: posted {posted}/{total} new listings")
+
+            # Notify admin if there's a chat ID configured
+            if self.settings.telegram_chat_id and total > 0:
+                await context.bot.send_message(
+                    chat_id=self.settings.telegram_chat_id,
+                    text=f"🔄 Daily scrape: posted {posted}/{total} new Pokémon promo listings.",
+                )
+        except Exception as e:
+            logger.error(f"Scheduled scrape failed: {e}", exc_info=True)
+            if self.settings.telegram_chat_id:
+                await context.bot.send_message(
+                    chat_id=self.settings.telegram_chat_id,
+                    text=f"❌ Daily scrape failed: {e}",
+                )
 
     # ------------------------------------------------------------------
     # /consolidate — GST-avoidance shipping calculator

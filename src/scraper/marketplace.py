@@ -11,13 +11,7 @@ logger = logging.getLogger(__name__)
 
 # Search keywords for different card categories
 SEARCH_KEYWORDS = {
-    "ar_chr_rr": ["連番 pokemon 10"],
-    "sar_csr_sr": [
-        "ポケモン psa10 SAR",
-        "ポケモン psa10 CSR",
-        "ポケモン psa10 SR",
-        "ワンピース psa10",
-    ],
+    "pokemon_promo": ["pikachu promo"],
 }
 
 DOORZO_API_URL = "https://sig.doorzo.com/"
@@ -37,11 +31,12 @@ DOORZO_DEFAULT_HEADERS = {
 class RawListing:
     """A scraped listing from a Japanese marketplace."""
 
+    listing_id: str  # Doorzo Asin — unique identifier for de-duplication
     raw_title: str
     raw_price_jpy: int
     image_url: str
     source_url: str
-    category: str  # "ar_chr_rr" or "sar_csr_sr"
+    category: str
 
 
 async def fetch_exchange_rate(target_currency: str = "SGD") -> float:
@@ -143,12 +138,8 @@ async def scrape_doorzo(
 
             for page_num in range(max_pages_per_keyword):
                 try:
-                    logger.info(
-                        f"Doorzo search: keyword='{keyword}' page={page_num + 1}"
-                    )
-                    data = await _doorzo_search_page(
-                        client, keyword, next_page_token=next_token
-                    )
+                    logger.info(f"Doorzo search: keyword='{keyword}' page={page_num + 1}")
+                    data = await _doorzo_search_page(client, keyword, next_page_token=next_token)
 
                     if data.get("code") != 200:
                         logger.warning(f"Doorzo API error: {data.get('msg', 'unknown')}")
@@ -182,6 +173,7 @@ async def scrape_doorzo(
 
                         listings.append(
                             RawListing(
+                                listing_id=asin,
                                 raw_title=raw_title,
                                 raw_price_jpy=raw_price_jpy,
                                 image_url=image_url,

@@ -46,16 +46,15 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = Field(
         default=None, description="Google Gemini API key for translation (free tier)"
     )
+    catalogue_bot_token: str | None = Field(
+        default=None, description="Catalogue bot token used for posting scraped listings"
+    )
     scraper_channel_id: int | None = Field(
         default=None, description="Telegram channel/group ID for posting scraped listings"
     )
-    scraper_topic_ar_chr_rr: int | None = Field(
+    scraper_topic_pokemon_promo: int | None = Field(
         default=None,
-        description="Forum topic ID for Pkmn AR/CHR/RR SLAB SALES",
-    )
-    scraper_topic_sar_csr_sr: int | None = Field(
-        default=None,
-        description="Forum topic ID for Pkmn SAR/CSR/SR SLAB SALES",
+        description="Forum topic ID for Pokémon Promo card listings",
     )
     scraper_markup: float = Field(default=1.3, description="Price markup multiplier (1.3 = 30%)")
     scraper_min_price: float = Field(default=60.0, description="Minimum listing price in SGD")
