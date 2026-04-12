@@ -18,9 +18,7 @@ class Settings(BaseSettings):
     )
 
     # Telegram Bot
-    telegram_bot_token: str = Field(
-        ..., description="Telegram bot token from @BotFather"
-    )
+    telegram_bot_token: str = Field(..., description="Telegram bot token from @BotFather")
     telegram_chat_id: int | None = Field(
         default=None, description="Your Telegram chat ID for automated reports"
     )
@@ -31,30 +29,36 @@ class Settings(BaseSettings):
 
     # MongoDB Configuration
     mongodb_uri: str | None = Field(default=None, description="MongoDB connection URI")
-    mongodb_database: str = Field(
-        default="telegram_bot", description="MongoDB database name"
-    )
+    mongodb_database: str = Field(default="telegram_bot", description="MongoDB database name")
 
     # Business Details
     business_name: str = Field(default="Your Business", description="Business name")
-    business_address: str = Field(
-        default="Your Address", description="Business address"
-    )
+    business_address: str = Field(default="Your Address", description="Business address")
     business_phone: str = Field(default="Your Phone", description="Business phone")
-    business_email: str = Field(
-        default="contact@business.com", description="Business email"
-    )
-    business_registration: str = Field(
-        default="", description="Business registration number"
-    )
+    business_email: str = Field(default="contact@business.com", description="Business email")
+    business_registration: str = Field(default="", description="Business registration number")
 
     # GST Configuration
-    gst_rate: Decimal = Field(
-        default=Decimal("0.09"), description="GST rate (9% = 0.09)"
+    gst_rate: Decimal = Field(default=Decimal("0.09"), description="GST rate (9% = 0.09)")
+    gst_threshold: Decimal = Field(default=Decimal("400.00"), description="GST threshold amount")
+
+    # Scraper Pipeline
+    gemini_api_key: str | None = Field(
+        default=None, description="Google Gemini API key for translation (free tier)"
     )
-    gst_threshold: Decimal = Field(
-        default=Decimal("400.00"), description="GST threshold amount"
+    catalogue_bot_token: str | None = Field(
+        default=None, description="Catalogue bot token used for posting scraped listings"
     )
+    scraper_channel_id: int | None = Field(
+        default=None, description="Telegram channel/group ID for posting scraped listings"
+    )
+    scraper_topic_pokemon_promo: int | None = Field(
+        default=None,
+        description="Forum topic ID for Pokémon Promo card listings",
+    )
+    scraper_markup: float = Field(default=1.3, description="Price markup multiplier (1.3 = 30%)")
+    scraper_min_price: float = Field(default=60.0, description="Minimum listing price in SGD")
+    scraper_max_price: float = Field(default=1000.0, description="Maximum listing price in SGD")
 
     @property
     def invoices_dir(self) -> Path:
@@ -115,20 +119,14 @@ class CatalogueSettings(BaseSettings):
 
     # Shared MongoDB (same cluster as accounting bot)
     mongodb_uri: str | None = Field(default=None, description="MongoDB connection URI")
-    mongodb_database: str = Field(
-        default="telegram_bot", description="MongoDB database name"
-    )
+    mongodb_database: str = Field(default="telegram_bot", description="MongoDB database name")
 
     @property
     def catalogue_group_ids(self) -> list[int]:
         """Parse comma-separated group IDs into a list of ints."""
         if not self.catalogue_group_ids_raw:
             return []
-        return [
-            int(x.strip())
-            for x in self.catalogue_group_ids_raw.split(",")
-            if x.strip()
-        ]
+        return [int(x.strip()) for x in self.catalogue_group_ids_raw.split(",") if x.strip()]
 
 
 def load_catalogue_settings() -> CatalogueSettings:

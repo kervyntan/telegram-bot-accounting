@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run:*)",
+      "Bash(uv pip:*)",
+      "Bash(curl -s 'https://sig.doorzo.com/?n=Sig.Front.SubSite.AppGlobal.MixSearch&from=INTERNATIONAL&isNew=15&language=en&keyword=mew+promo&filter=lashinbang&classification&website=mercari&category&condition&seller&onlyInStock=1&nextPageToken=&deviceId=pc_test123' -H 'accept: */*' -H 'origin: https://www.doorzo.com' -H 'referer: https://www.doorzo.com/' -H 'user-agent: Mozilla/5.0 \\(Macintosh; Intel Mac OS X 10_15_7\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/146.0.0.0 Safari/537.36' -H 'timezone: Asia/Singapore')",
+      "Bash(python3 -m json.tool)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''Total items:'''', len\\(d[''''data''''][''''items'''']\\)\\); print\\(''''Next token:'''', d[''''data''''].get\\(''''nextPageToken''''\\)\\); print\\(''''Keys:'''', list\\(d[''''data''''].keys\\(\\)\\)\\)\")",
+      "Bash(curl -s 'https://sig.doorzo.com/?n=Sig.Front.SubSite.AppGlobal.MixSearch&from=INTERNATIONAL&isNew=15&language=en&keyword=ポケモン+psa10+SAR&filter=&classification=&website=mercari&category=&condition=&seller=&onlyInStock=1&nextPageToken=&deviceId=pc_test123' -H 'accept: */*' -H 'origin: https://www.doorzo.com' -H 'referer: https://www.doorzo.com/' -H 'user-agent: Mozilla/5.0 \\(Macintosh; Intel Mac OS X 10_15_7\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/146.0.0.0 Safari/537.36' -H 'timezone: Asia/Singapore')"
+    ]
+  }
+}

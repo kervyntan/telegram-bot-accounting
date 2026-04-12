@@ -1,4 +1,4 @@
-"""MongoDB storage for invoice records."""
+"""MongoDB storage for invoice records and scraper de-duplication."""
 
 import re
 from datetime import datetime, timedelta
@@ -135,12 +135,8 @@ class MongoInvoiceStorage:
 
         # Count payment statuses
         paid_count = sum(1 for inv in invoices if inv.get("payment_status") == "PAID")
-        partial_count = sum(
-            1 for inv in invoices if inv.get("payment_status") == "PARTIAL"
-        )
-        unpaid_count = sum(
-            1 for inv in invoices if inv.get("payment_status") == "UNPAID"
-        )
+        partial_count = sum(1 for inv in invoices if inv.get("payment_status") == "PARTIAL")
+        unpaid_count = sum(1 for inv in invoices if inv.get("payment_status") == "UNPAID")
 
         # Calculate card costs (only active/unsold cards)
         active_cards = [c for c in cards if c.get("status") == "active"]
@@ -168,15 +164,11 @@ class MongoInvoiceStorage:
 
     def get_all_invoices(self, chat_id: int) -> dict[str, Any]:
         """Get all-time summary for inception report."""
-        invoices = list(
-            self.invoices.find({"chat_id": chat_id}).sort("timestamp", ASCENDING)
-        )
+        invoices = list(self.invoices.find({"chat_id": chat_id}).sort("timestamp", ASCENDING))
         cards = list(self.cards.find({"chat_id": chat_id}).sort("timestamp", ASCENDING))
         return self._calculate_summary(invoices, cards)
 
-    def get_invoices_by_customer(
-        self, chat_id: int, customer_name: str
-    ) -> list[dict[str, Any]]:
+    def get_invoices_by_customer(self, chat_id: int, customer_name: str) -> list[dict[str, Any]]:
         """Get all invoices for a specific customer (case-insensitive)."""
         # Normalize whitespace before building the regex so stored names with
         # non-breaking spaces or extra whitespace still match
@@ -305,11 +297,43 @@ class MongoInvoiceStorage:
     def get_active_cards(self, chat_id: int) -> list[dict[str, Any]]:
         """Get all active (unsold) card purchases."""
         return list(
-            self.cards.find({"chat_id": chat_id, "status": "active"}).sort(
-                "timestamp", DESCENDING
-            )
+            self.cards.find({"chat_id": chat_id, "status": "active"}).sort("timestamp", DESCENDING)
         )
 
     def close(self) -> None:
         """Close MongoDB connection."""
+        self.client.close()
+
+
+class ScraperListingStorage:
+    """Track sent scraper listings in MongoDB for de-duplication."""
+
+    def __init__(self, mongo_uri: str, database_name: str = "telegram_bot") -> None:
+        self.client = MongoClient(mongo_uri)
+        self.db: Database = self.client[database_name]
+        self.listings: Collection = self.db["scraper_listings"]
+
+        self.listings.create_index("listing_id", unique=True)
+        self.listings.create_index("sent_at")
+
+    def get_seen_ids(self) -> set[str]:
+        """Return all listing IDs that have already been sent."""
+        return {doc["listing_id"] for doc in self.listings.find({}, {"listing_id": 1})}
+
+    def mark_sent(self, listing_id: str, title: str, source_url: str) -> None:
+        """Record a listing as sent."""
+        self.listings.update_one(
+            {"listing_id": listing_id},
+            {
+                "$set": {
+                    "listing_id": listing_id,
+                    "title": title,
+                    "source_url": source_url,
+                    "sent_at": datetime.now(),
+                }
+            },
+            upsert=True,
+        )
+
+    def close(self) -> None:
         self.client.close()

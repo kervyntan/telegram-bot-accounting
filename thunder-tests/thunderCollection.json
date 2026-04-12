@@ -1,0 +1,511 @@
+[
+  {
+    "_id": "col_telegram_bot",
+    "colName": "Telegram Bot Accounting",
+    "created": "2026-03-26T00:00:00.000Z",
+    "folders": [
+      {
+        "_id": "fld_health",
+        "name": "Health Checks",
+        "containerId": "",
+        "created": "2026-03-26T00:00:00.000Z",
+        "sortNum": 10000
+      },
+      {
+        "_id": "fld_invoice_bot",
+        "name": "Invoice Bot API",
+        "containerId": "",
+        "created": "2026-03-26T00:00:00.000Z",
+        "sortNum": 20000
+      },
+      {
+        "_id": "fld_catalogue_bot",
+        "name": "Catalogue Bot API",
+        "containerId": "",
+        "created": "2026-03-26T00:00:00.000Z",
+        "sortNum": 30000
+      },
+      {
+        "_id": "fld_telegram_api",
+        "name": "Telegram Bot API",
+        "containerId": "",
+        "created": "2026-03-26T00:00:00.000Z",
+        "sortNum": 40000
+      }
+    ],
+    "requests": [
+      {
+        "_id": "req_health_invoice",
+        "colId": "col_telegram_bot",
+        "containerId": "fld_health",
+        "name": "Invoice Bot Health",
+        "url": "{{BASE_URL}}/api/webhook",
+        "method": "GET",
+        "sortNum": 10000,
+        "created": "2026-03-26T00:00:00.000Z",
+        "modified": "2026-03-26T00:00:00.000Z",
+        "headers": [],
+        "params": [],
+        "body": {
+          "type": "none"
+        },
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          },
+          {
+            "type": "res-body",
+            "custom": "",
+            "action": "contains",
+            "value": "invoice"
+          }
+        ]
+      },
+      {
+        "_id": "req_health_catalogue",
+        "colId": "col_telegram_bot",
+        "containerId": "fld_health",
+        "name": "Catalogue Bot Health",
+        "url": "{{BASE_URL}}/api/catalogue_webhook",
+        "method": "GET",
+        "sortNum": 20000,
+        "created": "2026-03-26T00:00:00.000Z",
+        "modified": "2026-03-26T00:00:00.000Z",
+        "headers": [],
+        "params": [],
+        "body": {
+          "type": "none"
+        },
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          },
+          {
+            "type": "res-body",
+            "custom": "",
+            "action": "contains",
+            "value": "catalogue"
+          }
+        ]
+      },
+      {
+        "_id": "req_health_invoice_local",
+        "colId": "col_telegram_bot",
+        "containerId": "fld_health",
+        "name": "Invoice Bot Health (Local)",
+        "url": "{{LOCAL_URL}}/api/webhook",
+        "method": "GET",
+        "sortNum": 30000,
+        "created": "2026-03-26T00:00:00.000Z",
+        "modified": "2026-03-26T00:00:00.000Z",
+        "headers": [],
+        "params": [],
+        "body": {
+          "type": "none"
+        },
+        "tests": []
+      },
+      {
+        "_id": "req_health_catalogue_local",
+        "colId": "col_telegram_bot",
+        "containerId": "fld_health",
+        "name": "Catalogue Bot Health (Local)",
+        "url": "{{LOCAL_URL}}/api/catalogue_webhook",
+        "method": "GET",
+        "sortNum": 40000,
+        "created": "2026-03-26T00:00:00.000Z",
+        "modified": "2026-03-26T00:00:00.000Z",
+        "headers": [],
+        "params": [],
+        "body": {
+          "type": "none"
+        },
+        "tests": []
+      },
+      {
+        "_id": "req_invoice_text_msg",
+        "colId": "col_telegram_bot",
+        "containerId": "fld_invoice_bot",
+        "name": "Send Text Message Update",
+        "url": "{{BASE_URL}}/api/webhook",
+        "method": "POST",
+        "sortNum": 10000,
+        "created": "2026-03-26T00:00:00.000Z",
+        "modified": "2026-03-26T00:00:00.000Z",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "params": [],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"update_id\": 100000001,\n  \"message\": {\n    \"message_id\": 1,\n    \"from\": {\n      \"id\": {{TELEGRAM_CHAT_ID}},\n      \"is_bot\": false,\n      \"first_name\": \"Test\",\n      \"username\": \"testuser\"\n    },\n    \"chat\": {\n      \"id\": {{TELEGRAM_CHAT_ID}},\n      \"first_name\": \"Test\",\n      \"username\": \"testuser\",\n      \"type\": \"private\"\n    },\n    \"date\": 1711440000,\n    \"text\": \"Pikachu VMAX\\n2 x $50\\nShipping $10\"\n  }\n}"
+        },
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+      {
+        "_id": "req_invoice_command",
+        "colId": "col_telegram_bot",
+        "containerId": "fld_invoice_bot",
+        "name": "Send /start Command",
+        "url": "{{BASE_URL}}/api/webhook",
+        "method": "POST",
+        "sortNum": 20000,
+        "created": "2026-03-26T00:00:00.000Z",
+        "modified": "2026-03-26T00:00:00.000Z",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "params": [],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"update_id\": 100000002,\n  \"message\": {\n    \"message_id\": 2,\n    \"from\": {\n      \"id\": {{TELEGRAM_CHAT_ID}},\n      \"is_bot\": false,\n      \"first_name\": \"Test\",\n      \"username\": \"testuser\"\n    },\n    \"chat\": {\n      \"id\": {{TELEGRAM_CHAT_ID}},\n      \"first_name\": \"Test\",\n      \"username\": \"testuser\",\n      \"type\": \"private\"\n    },\n    \"date\": 1711440000,\n    \"text\": \"/start\",\n    \"entities\": [\n      {\n        \"offset\": 0,\n        \"length\": 6,\n        \"type\": \"bot_command\"\n      }\n    ]\n  }\n}"
+        },
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+      {
+        "_id": "req_invoice_cards_cmd",
+        "colId": "col_telegram_bot",
+        "containerId": "fld_invoice_bot",
+        "name": "Send /cards Command",
+        "url": "{{BASE_URL}}/api/webhook",
+        "method": "POST",
+        "sortNum": 30000,
+        "created": "2026-03-26T00:00:00.000Z",
+        "modified": "2026-03-26T00:00:00.000Z",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "params": [],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"update_id\": 100000003,\n  \"message\": {\n    \"message_id\": 3,\n    \"from\": {\n      \"id\": {{TELEGRAM_CHAT_ID}},\n      \"is_bot\": false,\n      \"first_name\": \"Test\",\n      \"username\": \"testuser\"\n    },\n    \"chat\": {\n      \"id\": {{TELEGRAM_CHAT_ID}},\n      \"first_name\": \"Test\",\n      \"username\": \"testuser\",\n      \"type\": \"private\"\n    },\n    \"date\": 1711440000,\n    \"text\": \"/cards\",\n    \"entities\": [\n      {\n        \"offset\": 0,\n        \"length\": 6,\n        \"type\": \"bot_command\"\n      }\n    ]\n  }\n}"
+        },
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+      {
+        "_id": "req_catalogue_text_msg",
+        "colId": "col_telegram_bot",
+        "containerId": "fld_catalogue_bot",
+        "name": "Send Search Query",
+        "url": "{{BASE_URL}}/api/catalogue_webhook",
+        "method": "POST",
+        "sortNum": 10000,
+        "created": "2026-03-26T00:00:00.000Z",
+        "modified": "2026-03-26T00:00:00.000Z",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "params": [],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"update_id\": 200000001,\n  \"message\": {\n    \"message_id\": 1,\n    \"from\": {\n      \"id\": {{OWNER_CHAT_ID}},\n      \"is_bot\": false,\n      \"first_name\": \"Test\",\n      \"username\": \"testuser\"\n    },\n    \"chat\": {\n      \"id\": {{OWNER_CHAT_ID}},\n      \"first_name\": \"Test\",\n      \"username\": \"testuser\",\n      \"type\": \"private\"\n    },\n    \"date\": 1711440000,\n    \"text\": \"Pikachu\"\n  }\n}"
+        },
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+      {
+        "_id": "req_catalogue_group_msg",
+        "colId": "col_telegram_bot",
+        "containerId": "fld_catalogue_bot",
+        "name": "Group Message (Index Listing)",
+        "url": "{{BASE_URL}}/api/catalogue_webhook",
+        "method": "POST",
+        "sortNum": 20000,
+        "created": "2026-03-26T00:00:00.000Z",
+        "modified": "2026-03-26T00:00:00.000Z",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "params": [],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"update_id\": 200000002,\n  \"message\": {\n    \"message_id\": 100,\n    \"from\": {\n      \"id\": 12345678,\n      \"is_bot\": false,\n      \"first_name\": \"Seller\",\n      \"username\": \"seller\"\n    },\n    \"chat\": {\n      \"id\": {{CATALOGUE_GROUP_ID}},\n      \"title\": \"JaxTrades Catalogue\",\n      \"type\": \"supergroup\"\n    },\n    \"date\": 1711440000,\n    \"text\": \"Charizard VMAX Alt Art\\n$120 SGD\\nAvailable\"\n  }\n}"
+        },
+        "tests": [
+          {
+            "type": "res-code",
+            "custom": "",
+            "action": "equal",
+            "value": "200"
+          }
+        ]
+      },
+      {
+        "_id": "req_tg_getme_invoice",
+        "colId": "col_telegram_bot",
+        "containerId": "fld_telegram_api",
+        "name": "getMe (Invoice Bot)",
+        "url": "https://api.telegram.org/bot{{INVOICE_BOT_TOKEN}}/getMe",
+        "method": "GET",
+        "sortNum": 10000,
+        "created": "2026-03-26T00:00:00.000Z",
+        "modified": "2026-03-26T00:00:00.000Z",
+        "headers": [],
+        "params": [],
+        "body": {
+          "type": "none"
+        },
+        "tests": [
+          {
+            "type": "res-body",
+            "custom": "",
+            "action": "contains",
+            "value": "\"ok\":true"
+          }
+        ]
+      },
+      {
+        "_id": "req_tg_getme_catalogue",
+        "colId": "col_telegram_bot",
+        "containerId": "fld_telegram_api",
+        "name": "getMe (Catalogue Bot)",
+        "url": "https://api.telegram.org/bot{{CATALOGUE_BOT_TOKEN}}/getMe",
+        "method": "GET",
+        "sortNum": 20000,
+        "created": "2026-03-26T00:00:00.000Z",
+        "modified": "2026-03-26T00:00:00.000Z",
+        "headers": [],
+        "params": [],
+        "body": {
+          "type": "none"
+        },
+        "tests": [
+          {
+            "type": "res-body",
+            "custom": "",
+            "action": "contains",
+            "value": "\"ok\":true"
+          }
+        ]
+      },
+      {
+        "_id": "req_tg_webhook_info_invoice",
+        "colId": "col_telegram_bot",
+        "containerId": "fld_telegram_api",
+        "name": "getWebhookInfo (Invoice Bot)",
+        "url": "https://api.telegram.org/bot{{INVOICE_BOT_TOKEN}}/getWebhookInfo",
+        "method": "GET",
+        "sortNum": 30000,
+        "created": "2026-03-26T00:00:00.000Z",
+        "modified": "2026-03-26T00:00:00.000Z",
+        "headers": [],
+        "params": [],
+        "body": {
+          "type": "none"
+        },
+        "tests": []
+      },
+      {
+        "_id": "req_tg_webhook_info_catalogue",
+        "colId": "col_telegram_bot",
+        "containerId": "fld_telegram_api",
+        "name": "getWebhookInfo (Catalogue Bot)",
+        "url": "https://api.telegram.org/bot{{CATALOGUE_BOT_TOKEN}}/getWebhookInfo",
+        "method": "GET",
+        "sortNum": 40000,
+        "created": "2026-03-26T00:00:00.000Z",
+        "modified": "2026-03-26T00:00:00.000Z",
+        "headers": [],
+        "params": [],
+        "body": {
+          "type": "none"
+        },
+        "tests": []
+      },
+      {
+        "_id": "req_tg_set_webhook_invoice",
+        "colId": "col_telegram_bot",
+        "containerId": "fld_telegram_api",
+        "name": "setWebhook (Invoice Bot)",
+        "url": "https://api.telegram.org/bot{{INVOICE_BOT_TOKEN}}/setWebhook",
+        "method": "POST",
+        "sortNum": 50000,
+        "created": "2026-03-26T00:00:00.000Z",
+        "modified": "2026-03-26T00:00:00.000Z",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "params": [],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"url\": \"{{BASE_URL}}/api/webhook\"\n}"
+        },
+        "tests": [
+          {
+            "type": "res-body",
+            "custom": "",
+            "action": "contains",
+            "value": "\"ok\":true"
+          }
+        ]
+      },
+      {
+        "_id": "req_tg_set_webhook_catalogue",
+        "colId": "col_telegram_bot",
+        "containerId": "fld_telegram_api",
+        "name": "setWebhook (Catalogue Bot)",
+        "url": "https://api.telegram.org/bot{{CATALOGUE_BOT_TOKEN}}/setWebhook",
+        "method": "POST",
+        "sortNum": 60000,
+        "created": "2026-03-26T00:00:00.000Z",
+        "modified": "2026-03-26T00:00:00.000Z",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "params": [],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"url\": \"{{BASE_URL}}/api/catalogue_webhook\"\n}"
+        },
+        "tests": [
+          {
+            "type": "res-body",
+            "custom": "",
+            "action": "contains",
+            "value": "\"ok\":true"
+          }
+        ]
+      },
+      {
+        "_id": "req_tg_delete_webhook_invoice",
+        "colId": "col_telegram_bot",
+        "containerId": "fld_telegram_api",
+        "name": "deleteWebhook (Invoice Bot)",
+        "url": "https://api.telegram.org/bot{{INVOICE_BOT_TOKEN}}/deleteWebhook",
+        "method": "POST",
+        "sortNum": 70000,
+        "created": "2026-03-26T00:00:00.000Z",
+        "modified": "2026-03-26T00:00:00.000Z",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "params": [],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"drop_pending_updates\": true\n}"
+        },
+        "tests": []
+      },
+      {
+        "_id": "req_tg_delete_webhook_catalogue",
+        "colId": "col_telegram_bot",
+        "containerId": "fld_telegram_api",
+        "name": "deleteWebhook (Catalogue Bot)",
+        "url": "https://api.telegram.org/bot{{CATALOGUE_BOT_TOKEN}}/deleteWebhook",
+        "method": "POST",
+        "sortNum": 80000,
+        "created": "2026-03-26T00:00:00.000Z",
+        "modified": "2026-03-26T00:00:00.000Z",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "params": [],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"drop_pending_updates\": true\n}"
+        },
+        "tests": []
+      },
+      {
+        "_id": "req_tg_send_message",
+        "colId": "col_telegram_bot",
+        "containerId": "fld_telegram_api",
+        "name": "sendMessage (Invoice Bot)",
+        "url": "https://api.telegram.org/bot{{INVOICE_BOT_TOKEN}}/sendMessage",
+        "method": "POST",
+        "sortNum": 90000,
+        "created": "2026-03-26T00:00:00.000Z",
+        "modified": "2026-03-26T00:00:00.000Z",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "params": [],
+        "body": {
+          "type": "json",
+          "raw": "{\n  \"chat_id\": {{TELEGRAM_CHAT_ID}},\n  \"text\": \"Hello from Thunder Client!\"\n}"
+        },
+        "tests": []
+      },
+      {
+        "_id": "req_tg_get_updates_invoice",
+        "colId": "col_telegram_bot",
+        "containerId": "fld_telegram_api",
+        "name": "getUpdates (Invoice Bot)",
+        "url": "https://api.telegram.org/bot{{INVOICE_BOT_TOKEN}}/getUpdates",
+        "method": "GET",
+        "sortNum": 100000,
+        "created": "2026-03-26T00:00:00.000Z",
+        "modified": "2026-03-26T00:00:00.000Z",
+        "headers": [],
+        "params": [],
+        "body": {
+          "type": "none"
+        },
+        "tests": []
+      }
+    ]
+  }
+]

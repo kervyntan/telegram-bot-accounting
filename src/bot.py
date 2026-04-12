@@ -89,15 +89,9 @@ class InvoiceBot:
                 owner_filter = filters.Chat(chat_id=settings.telegram_chat_id)
 
         # Register handlers
-        self.app.add_handler(
-            CommandHandler("start", self.start_command, filters=owner_filter)
-        )
-        self.app.add_handler(
-            CommandHandler("help", self.help_command, filters=owner_filter)
-        )
-        self.app.add_handler(
-            CommandHandler("chatid", self.chatid_command, filters=owner_filter)
-        )
+        self.app.add_handler(CommandHandler("start", self.start_command, filters=owner_filter))
+        self.app.add_handler(CommandHandler("help", self.help_command, filters=owner_filter))
+        self.app.add_handler(CommandHandler("chatid", self.chatid_command, filters=owner_filter))
         self.app.add_handler(
             CommandHandler("daily", self.daily_report_command, filters=owner_filter)
         )
@@ -105,38 +99,27 @@ class InvoiceBot:
             CommandHandler("weekly", self.weekly_report_command, filters=owner_filter)
         )
         self.app.add_handler(
-            CommandHandler(
-                "inception", self.inception_report_command, filters=owner_filter
-            )
+            CommandHandler("inception", self.inception_report_command, filters=owner_filter)
         )
         self.app.add_handler(
-            CommandHandler(
-                "partial", self.partial_invoices_command, filters=owner_filter
-            )
+            CommandHandler("partial", self.partial_invoices_command, filters=owner_filter)
         )
         self.app.add_handler(
             CommandHandler("payment", self.update_payment_command, filters=owner_filter)
         )
-        self.app.add_handler(
-            CommandHandler("buycard", self.buycard_command, filters=owner_filter)
-        )
-        self.app.add_handler(
-            CommandHandler("cards", self.cards_command, filters=owner_filter)
-        )
+        self.app.add_handler(CommandHandler("buycard", self.buycard_command, filters=owner_filter))
+        self.app.add_handler(CommandHandler("cards", self.cards_command, filters=owner_filter))
         self.app.add_handler(
             CommandHandler("sellcard", self.sellcard_command, filters=owner_filter)
         )
         self.app.add_handler(
-            CommandHandler(
-                "customerorders", self.customerorders_command, filters=owner_filter
-            )
+            CommandHandler("customerorders", self.customerorders_command, filters=owner_filter)
         )
+        self.app.add_handler(CommandHandler("scrape", self.scrape_command, filters=owner_filter))
         self.app.add_handler(
             ConversationHandler(
                 entry_points=[
-                    CommandHandler(
-                        "consolidate", self.consolidate_command, filters=owner_filter
-                    )
+                    CommandHandler("consolidate", self.consolidate_command, filters=owner_filter)
                 ],
                 states={
                     _CONSOLIDATE_RATE: [
@@ -152,17 +135,11 @@ class InvoiceBot:
                         )
                     ],
                 },
-                fallbacks=[
-                    CommandHandler(
-                        "cancel", self.consolidate_cancel, filters=owner_filter
-                    )
-                ],
+                fallbacks=[CommandHandler("cancel", self.consolidate_cancel, filters=owner_filter)],
             )
         )
         self.app.add_handler(
-            MessageHandler(
-                filters.TEXT & ~filters.COMMAND & owner_filter, self.handle_message
-            )
+            MessageHandler(filters.TEXT & ~filters.COMMAND & owner_filter, self.handle_message)
         )
 
         # Schedule daily and weekly reports
@@ -183,6 +160,13 @@ class InvoiceBot:
                 name="weekly_report",
             )
 
+            # Daily scrape at 12 AM SGT (midnight)
+            job_queue.run_daily(
+                self._scheduled_scrape,
+                time=time(hour=0, minute=0, tzinfo=SGT),
+                name="daily_scrape",
+            )
+
     @staticmethod
     def _extract_bot_id(token: str) -> int | None:
         """Extract bot ID from a bot token (`<bot_id>:<secret>`)."""
@@ -191,9 +175,7 @@ class InvoiceBot:
         except (ValueError, AttributeError, IndexError):
             return None
 
-    async def start_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
+    async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /start command."""
         welcome_message = """👋 Welcome to Invoice Generator Bot!
 
@@ -215,13 +197,12 @@ I can help you generate professional invoices from simple messages.
 
 📊 Automatic Reports:
 • Daily report sent at 7 PM SGT
-• Weekly report sent every Friday at 7 PM SGT"""
+• Weekly report sent every Friday at 7 PM SGT
+• Daily scrape at 12 AM SGT (new listings only)"""
 
         await update.message.reply_text(welcome_message)
 
-    async def chatid_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
+    async def chatid_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /chatid command."""
         if not update.message:
             return
@@ -240,16 +221,12 @@ Reports will be sent automatically at 7 PM SGT."""
         await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
         logger.info(f"Chat ID requested: {chat_id}")
 
-    async def help_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
+    async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /help command."""
         help_message = self.parser.get_help_message()
         await update.message.reply_text(help_message, parse_mode=ParseMode.MARKDOWN)
 
-    async def handle_message(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
+    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle regular text messages."""
         if not update.message or not update.message.text:
             return
@@ -266,9 +243,7 @@ Reports will be sent automatically at 7 PM SGT."""
             invoice_data = self.parser.parse_invoice_message(message_text)
 
             # Generate both PDFs (client and internal)
-            client_pdf_path, internal_pdf_path = self.generator.generate_pdf(
-                invoice_data
-            )
+            client_pdf_path, internal_pdf_path = self.generator.generate_pdf(invoice_data)
 
             # Prepare caption
             caption = self._format_invoice_caption(invoice_data)
@@ -535,9 +510,7 @@ Reports will be sent automatically at 7 PM SGT."""
                 lines.append("")
             # Add profit margin and average
             if summary["total_revenue"] > 0:
-                invoice_margin = (
-                    summary["total_profit"] / summary["total_revenue"] * 100
-                )
+                invoice_margin = summary["total_profit"] / summary["total_revenue"] * 100
                 lines.append(f"📊 Invoice Profit Margin: {invoice_margin:.1f}%")
                 if summary["net_profit"] != summary["total_profit"]:
                     net_margin = summary["net_profit"] / summary["total_revenue"] * 100
@@ -606,14 +579,9 @@ Reports will be sent automatically at 7 PM SGT."""
                 lines.append("")
             # Add profit margin and average
             if summary["total_revenue"] > 0:
-                invoice_margin = (
-                    summary["total_profit"] / summary["total_revenue"] * 100
-                )
+                invoice_margin = summary["total_profit"] / summary["total_revenue"] * 100
                 lines.append(f"📊 Invoice Profit Margin: {invoice_margin:.1f}%")
-                if (
-                    summary.get("net_profit", summary["total_profit"])
-                    != summary["total_profit"]
-                ):
+                if summary.get("net_profit", summary["total_profit"]) != summary["total_profit"]:
                     net_margin = summary["net_profit"] / summary["total_revenue"] * 100
                     lines.append(f"📊 Net Profit Margin: {net_margin:.1f}%")
                 avg = summary["total_revenue"] / summary["total_invoices"]
@@ -707,9 +675,7 @@ Reports will be sent automatically at 7 PM SGT."""
                 parse_mode=ParseMode.MARKDOWN,
             )
 
-    async def buycard_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
+    async def buycard_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /buycard command - add a card purchase for inventory tracking."""
         if not update.message or not context.args:
             help_message = (
@@ -723,9 +689,7 @@ Reports will be sent automatically at 7 PM SGT."""
                 "Notes are optional. Prices can include $ or not."
             )
             if update.message:
-                await update.message.reply_text(
-                    help_message, parse_mode=ParseMode.MARKDOWN
-                )
+                await update.message.reply_text(help_message, parse_mode=ParseMode.MARKDOWN)
             return
 
         # Join all args and parse
@@ -810,9 +774,7 @@ Reports will be sent automatically at 7 PM SGT."""
                 exc_info=True,
             )
 
-    async def cards_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
+    async def cards_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /cards command - show active card purchases."""
         if not update.message:
             return
@@ -973,9 +935,7 @@ Reports will be sent automatically at 7 PM SGT."""
             filename=f"orders_{safe_name}_items.txt",
         )
 
-    async def sellcard_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
+    async def sellcard_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /sellcard command - mark a card as sold."""
         if not update.message or not context.args:
             help_message = (
@@ -986,9 +946,7 @@ Reports will be sent automatically at 7 PM SGT."""
                 "💡 Use /cards to see all active card IDs"
             )
             if update.message:
-                await update.message.reply_text(
-                    help_message, parse_mode=ParseMode.MARKDOWN
-                )
+                await update.message.reply_text(help_message, parse_mode=ParseMode.MARKDOWN)
             return
 
         card_id = context.args[0]
@@ -1002,9 +960,7 @@ Reports will be sent automatically at 7 PM SGT."""
                     "It will no longer be included in P/L calculations.",
                     parse_mode=ParseMode.MARKDOWN,
                 )
-                logger.info(
-                    f"Card marked as sold in chat {update.message.chat_id}: {card_id}"
-                )
+                logger.info(f"Card marked as sold in chat {update.message.chat_id}: {card_id}")
             else:
                 await update.message.reply_text(
                     f"❌ Card *{card_id}* not found.\n\n"
@@ -1021,6 +977,190 @@ Reports will be sent automatically at 7 PM SGT."""
                 f"Error marking card as sold in chat {update.message.chat_id}: {e}",
                 exc_info=True,
             )
+
+    # ------------------------------------------------------------------
+    # /scrape — automated sourcing from Japanese marketplaces
+    # ------------------------------------------------------------------
+
+    def _get_scraper_listing_storage(self):
+        """Lazily get ScraperListingStorage (requires MongoDB)."""
+        if not self.settings.mongodb_uri:
+            return None
+        from .mongo_storage import ScraperListingStorage
+
+        return ScraperListingStorage(self.settings.mongodb_uri, self.settings.mongodb_database)
+
+    async def _run_scrape_and_post(self, categories=None):
+        """Run the scraper pipeline, de-duplicate, post new listings, and return stats.
+
+        Uses the catalogue bot token to post to the scraper channel.
+        Shared between /scrape command and the scheduled daily job.
+        Returns (posted_count, total_count, listings) or raises on failure.
+        """
+        from telegram import Bot
+
+        from .scraper import ScraperPipeline
+
+        topic_map = {
+            "pokemon_promo": self.settings.scraper_topic_pokemon_promo,
+        }
+
+        # Use catalogue bot for posting to the channel
+        catalogue_bot = Bot(token=self.settings.catalogue_bot_token)
+
+        # Load already-sent listing IDs from MongoDB
+        scraper_storage = self._get_scraper_listing_storage()
+        seen_ids = scraper_storage.get_seen_ids() if scraper_storage else set()
+
+        pipeline = ScraperPipeline(
+            gemini_api_key=self.settings.gemini_api_key,
+            markup=self.settings.scraper_markup,
+            min_price=self.settings.scraper_min_price,
+            max_price=self.settings.scraper_max_price,
+        )
+
+        listings = await pipeline.run(categories=categories, seen_listing_ids=seen_ids)
+
+        if not listings:
+            if scraper_storage:
+                scraper_storage.close()
+            return 0, 0, []
+
+        posted = 0
+        for listing in listings:
+            topic_id = topic_map.get(listing.category)
+            caption = f"*{listing.english_title}*\nSGD ${listing.final_price}"
+
+            for attempt in range(3):
+                try:
+                    await catalogue_bot.send_photo(
+                        chat_id=self.settings.scraper_channel_id,
+                        message_thread_id=topic_id,
+                        photo=listing.image_url,
+                        caption=caption,
+                        parse_mode=ParseMode.MARKDOWN,
+                    )
+                    # Mark as sent in MongoDB
+                    if scraper_storage:
+                        scraper_storage.mark_sent(
+                            listing.listing_id,
+                            listing.english_title,
+                            listing.source_url,
+                        )
+                    posted += 1
+                    break
+                except Exception as e:
+                    error_msg = str(e)
+                    if "Flood control" in error_msg or "429" in error_msg:
+                        wait = 25 if attempt < 2 else 0
+                        if wait:
+                            logger.warning(f"Rate limited, waiting {wait}s...")
+                            await asyncio.sleep(wait)
+                            continue
+                    logger.error(f"Failed to post listing: {e}")
+                    break
+
+            # Pace sends to avoid Telegram flood control
+            await asyncio.sleep(1.5)
+
+        if scraper_storage:
+            scraper_storage.close()
+
+        return posted, len(listings), listings
+
+    async def scrape_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /scrape command — run the scraper pipeline and post new listings.
+
+        Usage:
+            /scrape                — scrape all categories
+            /scrape pokemon_promo  — scrape only Pokémon promo
+        """
+        if not update.message:
+            return
+
+        # Validate config
+        if not self.settings.gemini_api_key:
+            await update.message.reply_text("❌ GEMINI_API_KEY not configured.")
+            return
+        if not self.settings.catalogue_bot_token:
+            await update.message.reply_text("❌ CATALOGUE_BOT_TOKEN not configured.")
+            return
+        if not self.settings.scraper_channel_id:
+            await update.message.reply_text("❌ SCRAPER_CHANNEL_ID not configured.")
+            return
+
+        valid_categories = {"pokemon_promo"}
+
+        # Parse category filter
+        categories = None
+        if context.args:
+            cat = context.args[0].lower()
+            if cat not in valid_categories:
+                await update.message.reply_text(
+                    f"❌ Unknown category. Use: {', '.join(sorted(valid_categories))}",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                return
+            categories = [cat]
+
+        status_msg = await update.message.reply_text("⏳ Starting scraper pipeline...")
+
+        try:
+            posted, total, listings = await self._run_scrape_and_post(
+                categories=categories
+            )
+
+            if total == 0:
+                await status_msg.edit_text("⚠️ No new listings found.")
+                return
+
+            await status_msg.edit_text(f"✅ Posted {posted}/{total} new listings to channel.")
+
+            # Send summary to admin (with source URLs for tracking)
+            summary_lines = ["📊 *Scrape Summary*", f"Posted: {posted}/{total}", ""]
+            for listing in listings:
+                summary_lines.append(
+                    f"• {listing.english_title}\n"
+                    f"  ¥{listing.raw_price_jpy:,} → SGD ${listing.final_price}\n"
+                    f"  {listing.source_url}"
+                )
+
+            await update.message.reply_text("\n".join(summary_lines), parse_mode=ParseMode.MARKDOWN)
+
+        except ImportError:
+            await status_msg.edit_text(
+                "❌ Scraper dependencies not installed.\n"
+                "Run: `uv pip install 'telegram-bot-accounting[scraper]'`",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+        except Exception as e:
+            logger.error(f"Scraper pipeline failed: {e}", exc_info=True)
+            await status_msg.edit_text(f"❌ Scraper failed: {e}")
+
+    async def _scheduled_scrape(self, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Scheduled daily scrape — runs at 12 AM SGT, posts only new listings."""
+        if not self.settings.gemini_api_key or not self.settings.scraper_channel_id:
+            logger.warning("Scheduled scrape skipped: missing GEMINI_API_KEY or SCRAPER_CHANNEL_ID")
+            return
+
+        logger.info("Starting scheduled daily scrape...")
+        try:
+            posted, total, _ = await self._run_scrape_and_post()
+            logger.info(f"Scheduled scrape complete: posted {posted}/{total} new listings")
+
+            # Notify admin if there's a chat ID configured
+            if self.settings.telegram_chat_id and total > 0:
+                await context.bot.send_message(
+                    chat_id=self.settings.telegram_chat_id,
+                    text=f"🔄 Daily scrape: posted {posted}/{total} new Pokémon promo listings.",
+                )
+        except Exception as e:
+            logger.error(f"Scheduled scrape failed: {e}", exc_info=True)
+            if self.settings.telegram_chat_id:
+                await context.bot.send_message(
+                    chat_id=self.settings.telegram_chat_id,
+                    text=f"❌ Daily scrape failed: {e}",
+                )
 
     # ------------------------------------------------------------------
     # /consolidate — GST-avoidance shipping calculator
@@ -1054,9 +1194,7 @@ Reports will be sent automatically at 7 PM SGT."""
 
         return selected
 
-    async def consolidate_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> int:
+    async def consolidate_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Handle /consolidate — step 1: ask for the JPY/SGD rate."""
         if not update.message:
             return ConversationHandler.END
@@ -1069,9 +1207,7 @@ Reports will be sent automatically at 7 PM SGT."""
         )
         return _CONSOLIDATE_RATE
 
-    async def consolidate_get_rate(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> int:
+    async def consolidate_get_rate(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Handle /consolidate — step 2: receive rate, ask for items."""
         if not update.message or not update.message.text:
             return _CONSOLIDATE_RATE
@@ -1199,15 +1335,11 @@ Reports will be sent automatically at 7 PM SGT."""
                 yen = round(sgd * rate)
                 lines.append(f"  • {name}: ¥{yen:,} (SGD {sgd:.2f})")
 
-        await update.message.reply_text(
-            "\n".join(lines), parse_mode=ParseMode.MARKDOWN
-        )
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
         context.user_data.pop("consolidate_rate", None)
         return ConversationHandler.END
 
-    async def consolidate_cancel(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> int:
+    async def consolidate_cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Cancel the /consolidate conversation."""
         if update.message:
             await update.message.reply_text("❌ Consolidation calculator cancelled.")

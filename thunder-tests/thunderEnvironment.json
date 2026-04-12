@@ -1,0 +1,37 @@
+[
+  {
+    "_id": "env_telegram_bot",
+    "name": "Telegram Bot Accounting",
+    "default": true,
+    "data": [
+      {
+        "name": "BASE_URL",
+        "value": "https://telegram-jaxtrades-accounting-kervyntans-projects.vercel.app"
+      },
+      {
+        "name": "LOCAL_URL",
+        "value": "http://localhost:3000"
+      },
+      {
+        "name": "INVOICE_BOT_TOKEN",
+        "value": "8567290063:AAEbP6U-TevFzxe64tV5F9RFo0Ez_3c3Sq0"
+      },
+      {
+        "name": "CATALOGUE_BOT_TOKEN",
+        "value": "8014168379:AAFRs2xnwtFRk5A6q1FbCWQkH2bVTgBj8TM"
+      },
+      {
+        "name": "TELEGRAM_CHAT_ID",
+        "value": "8567290063"
+      },
+      {
+        "name": "OWNER_CHAT_ID",
+        "value": "8014168379"
+      },
+      {
+        "name": "CATALOGUE_GROUP_ID",
+        "value": "-5222909921"
+      }
+    ]
+  }
+]
