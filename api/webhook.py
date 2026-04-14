@@ -23,6 +23,30 @@ from src.config import load_catalogue_settings, load_settings  # noqa: E402
 logger = logging.getLogger(__name__)
 
 
+async def _run_scheduled_scrape() -> str:
+    """Run the scraper pipeline and post new listings to the channel."""
+    settings = load_settings()
+
+    required = (settings.gemini_api_key, settings.scraper_channel_id, settings.catalogue_bot_token)
+    if not all(required):
+        return "Skipped: missing config"
+
+    bot = InvoiceBot(settings)
+    posted, total, _ = await bot._run_scrape_and_post()
+
+    # Notify admin
+    if settings.telegram_chat_id and total > 0:
+        from telegram import Bot
+
+        admin_bot = Bot(token=settings.telegram_bot_token)
+        await admin_bot.send_message(
+            chat_id=settings.telegram_chat_id,
+            text=f"🔄 Daily scrape: posted {posted}/{total} new Pokémon promo listings.",
+        )
+
+    return f"Posted {posted}/{total} new listings"
+
+
 async def _handle_invoice_update(payload: dict) -> None:
     """Process one invoice-bot update with a fresh Application lifecycle."""
     settings = load_settings()
@@ -67,8 +91,24 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        """Health check endpoint."""
+        """Health check and cron endpoints."""
         path = self.path.split("?")[0]
+
+        if path == "/api/cron/scrape":
+            try:
+                result = asyncio.run(_run_scheduled_scrape())
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok", "result": result}).encode())
+            except Exception as e:
+                logger.exception("Cron scrape failed")
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "error", "error": str(e)}).encode())
+            return
+
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()

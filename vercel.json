@@ -5,6 +5,18 @@
   ],
   "routes": [
     { "src": "/api/webhook", "dest": "/api/webhook.py" },
-    { "src": "/api/catalogue_webhook", "dest": "/api/webhook.py" }
-  ]
+    { "src": "/api/catalogue_webhook", "dest": "/api/webhook.py" },
+    { "src": "/api/cron/scrape", "dest": "/api/webhook.py" }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/scrape",
+      "schedule": "0 16 * * *"
+    }
+  ],
+  "functions": {
+    "api/webhook.py": {
+      "maxDuration": 300
+    }
+  }
 }
