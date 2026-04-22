@@ -24,27 +24,81 @@ logger = logging.getLogger(__name__)
 
 
 async def _run_scheduled_scrape() -> str:
-    """Run the scraper pipeline and post new listings to the channel."""
+    """Run the scraper pipeline and post only new listings to the channel."""
+    from telegram import Bot
+    from telegram.constants import ParseMode
+
+    from src.scraper import ScraperPipeline
+
     settings = load_settings()
 
     required = (settings.gemini_api_key, settings.scraper_channel_id, settings.catalogue_bot_token)
     if not all(required):
         return "Skipped: missing config"
 
-    bot = InvoiceBot(settings)
-    posted, total, _ = await bot._run_scrape_and_post()
+    # De-duplication via MongoDB
+    scraper_storage = None
+    seen_ids: set[str] = set()
+    if settings.mongodb_uri:
+        from src.mongo_storage import ScraperListingStorage
+
+        scraper_storage = ScraperListingStorage(settings.mongodb_uri, settings.mongodb_database)
+        seen_ids = scraper_storage.get_seen_ids()
+
+    pipeline = ScraperPipeline(
+        gemini_api_key=settings.gemini_api_key,
+        markup=settings.scraper_markup,
+        min_price=settings.scraper_min_price,
+        max_price=settings.scraper_max_price,
+    )
+    listings = await pipeline.run(seen_listing_ids=seen_ids)
+
+    if not listings:
+        if scraper_storage:
+            scraper_storage.close()
+        return "No new listings"
+
+    catalogue_bot = Bot(token=settings.catalogue_bot_token)
+    topic_id = settings.scraper_topic_pokemon_promo
+
+    posted = 0
+    for listing in listings:
+        caption = f"*{listing.english_title}*\nSGD ${listing.final_price}"
+        for attempt in range(3):
+            try:
+                await catalogue_bot.send_photo(
+                    chat_id=settings.scraper_channel_id,
+                    message_thread_id=topic_id,
+                    photo=listing.image_url,
+                    caption=caption,
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                if scraper_storage:
+                    scraper_storage.mark_sent(
+                        listing.listing_id, listing.english_title, listing.source_url
+                    )
+                posted += 1
+                break
+            except Exception as e:
+                if ("Flood control" in str(e) or "429" in str(e)) and attempt < 2:
+                    await asyncio.sleep(25)
+                    continue
+                logger.error(f"Failed to post listing: {e}")
+                break
+        await asyncio.sleep(1.5)
+
+    if scraper_storage:
+        scraper_storage.close()
 
     # Notify admin
-    if settings.telegram_chat_id and total > 0:
-        from telegram import Bot
-
+    if settings.telegram_chat_id and posted > 0:
         admin_bot = Bot(token=settings.telegram_bot_token)
         await admin_bot.send_message(
             chat_id=settings.telegram_chat_id,
-            text=f"🔄 Daily scrape: posted {posted}/{total} new Pokémon promo listings.",
+            text=f"🔄 Daily scrape: posted {posted}/{len(listings)} new listings.",
         )
 
-    return f"Posted {posted}/{total} new listings"
+    return f"Posted {posted}/{len(listings)} new listings"
 
 
 async def _handle_invoice_update(payload: dict) -> None:
